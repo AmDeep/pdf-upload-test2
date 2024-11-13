@@ -39,111 +39,117 @@ try:
     # Loading the PDF file (handling password protection)
     pdf, reader, *other_values = helpers.load_pdf(key="main")
 
-except FileNotDecryptedError:
-    pdf = "password_required"
+    if pdf == "password_required":
+        st.error("PDF is password protected. Please enter the password to proceed.")
+    else:
+        lcol, rcol = st.columns(2)
 
-if pdf == "password_required":
-    st.error("PDF is password protected. Please enter the password to proceed.")
-elif pdf:
-    lcol, rcol = st.columns(2)
+        with lcol.expander(label="🔍 Extract text"):
+            extract_text_lcol, extract_text_rcol = st.columns(2)
 
-    with lcol.expander(label="🔍 Extract text"):
-        extract_text_lcol, extract_text_rcol = st.columns(2)
+            page_numbers_str = helpers.select_pages(
+                container=extract_text_lcol,
+                key="extract_text_pages",
+            )
 
-        page_numbers_str = helpers.select_pages(
-            container=extract_text_lcol,
-            key="extract_text_pages",
-        )
+            mode = extract_text_rcol.radio(
+                "Extraction mode",
+                options=["plain", "layout"],
+                horizontal=True,
+                help="Layout mode extracts text in a format resembling the layout of the source PDF",
+            )
 
-        mode = extract_text_rcol.radio(
-            "Extraction mode",
-            options=["plain", "layout"],
-            horizontal=True,
-            help="Layout mode extracts text in a format resembling the layout of the source PDF",
-        )
-
-        if page_numbers_str:
-            try:
-                text = helpers.extract_text(reader, page_numbers_str, mode)
-            except (IndexError, ValueError):
-                st.error("Specified pages don't exist. Check the format.", icon="⚠️")
-            else:
-                st.text(text)
-
-                with open("text.txt", "w", encoding="utf-8") as f:
-                    f.write(text)
-
-                with open("text.txt") as f:
-                    st.download_button(
-                        "💾 Download extracted text",
-                        data=f,
-                        use_container_width=True,
-                    )
-
-    with rcol.expander(label="️🖼️ Extract images"):
-        if page_numbers_str := helpers.select_pages(
-            container=st,
-            key="extract_image_pages",
-        ):
-            try:
-                images = helpers.extract_images(reader, page_numbers_str)
-            except (IndexError, ValueError):
-                st.error("Specified pages don't exist. Check the format.", icon="⚠️")
-            else:
-                if images:
-                    for data, name in images.items():
-                        st.image(data, caption=name)
+            if page_numbers_str:
+                try:
+                    text = helpers.extract_text(reader, page_numbers_str, mode)
+                except (IndexError, ValueError):
+                    st.error("Specified pages don't exist. Check the format.", icon="⚠️")
                 else:
-                    st.info("No images found")
+                    st.text(text)
 
-    with lcol.expander("📊 Extract table"):
-        if page_numbers_str := helpers.select_pages(
-            container=st,
-            key="extract_table_pages",
-        ):
-            helpers.extract_tables(
-                st.session_state["file"],  # Use session_state["file"]
-                page_numbers_str,
-            )
+                    with open("text.txt", "w", encoding="utf-8") as f:
+                        f.write(text)
 
-    with rcol.expander("🔄️ Convert to Word"):
-        st.caption("Takes ~1 second/page. Will remove password if present")
+                    with open("text.txt") as f:
+                        st.download_button(
+                            "💾 Download extracted text",
+                            data=f,
+                            use_container_width=True,
+                        )
 
-        if st.button("Convert PDF to Word", use_container_width=True):
-            st.download_button(
-                "📥 Download Word document",
-                data=helpers.convert_pdf_to_word(pdf),
-                file_name=f"{st.session_state['name'][:-4]}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True,
-            )
+        with rcol.expander(label="️🖼️ Extract images"):
+            if page_numbers_str := helpers.select_pages(
+                container=st,
+                key="extract_image_pages",
+            ):
+                try:
+                    images = helpers.extract_images(reader, page_numbers_str)
+                except (IndexError, ValueError):
+                    st.error("Specified pages don't exist. Check the format.", icon="⚠️")
+                else:
+                    if images:
+                        for data, name in images.items():
+                            st.image(data, caption=name)
+                    else:
+                        st.info("No images found")
 
-    with lcol.expander("🔃 Rotate PDF"):
-        st.caption("Will remove password if present")
-        angle = st.slider(
-            "Clockwise angle",
-            min_value=0,
-            max_value=270,
-            step=90,
-            format="%d°",
-        )
+        with lcol.expander("📊 Extract table"):
+            if page_numbers_str := helpers.select_pages(
+                container=st,
+                key="extract_table_pages",
+            ):
+                helpers.extract_tables(
+                    st.session_state["file"],  # Use session_state["file"]
+                    page_numbers_str,
+                )
 
-        with PdfWriter() as writer:
-            for page in reader.pages:
-                writer.add_page(page)
-                writer.pages[-1].rotate(angle)
+        with rcol.expander("🔄️ Convert to Word"):
+            st.caption("Takes ~1 second/page. Will remove password if present")
 
-            writer.write("rotated.pdf")
-
-            with open("rotated.pdf", "rb") as f:
-                pdf_viewer(f.read(), height=250, width=300)
+            if st.button("Convert PDF to Word", use_container_width=True):
                 st.download_button(
-                    "📥 Download rotated PDF",
-                    data=f,
-                    mime="application/pdf",
-                    file_name=f"{st.session_state['name'].rsplit('.')[0]}_rotated_{angle}.pdf",
+                    "📥 Download Word document",
+                    data=helpers.convert_pdf_to_word(pdf),
+                    file_name=f"{st.session_state['name'][:-4]}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     use_container_width=True,
                 )
+
+        with lcol.expander("🔃 Rotate PDF"):
+            st.caption("Will remove password if present")
+            angle = st.slider(
+                "Clockwise angle",
+                min_value=0,
+                max_value=270,
+                step=90,
+                format="%d°",
+            )
+
+            with PdfWriter() as writer:
+                for page in reader.pages:
+                    writer.add_page(page)
+                    writer.pages[-1].rotate(angle)
+
+                writer.write("rotated.pdf")
+
+                with open("rotated.pdf", "rb") as f:
+                    pdf_viewer(f.read(), height=250, width=300)
+                    st.download_button(
+                        "📥 Download rotated PDF",
+                        data=f,
+                        mime="application/pdf",
+                        file_name=f"{st.session_state['name'].rsplit('.')[0]}_rotated_{angle}.pdf",
+                        use_container_width=True,
+                    )
+except Exception as e:
+    st.error(
+        f"""The app has encountered an error:  
+        `{e}`  
+        Please create an issue [here](https://github.com/SiddhantSadangi/pdf-workdesk/issues/new) 
+        with the below traceback""",
+        icon="🥺",
+    )
+    st.code(traceback.format_exc())
 
 # Custom Term Analysis Operations
 def extract_text_from_pdf(pdf_file):
