@@ -228,10 +228,10 @@ elif pdf:
 
 except Exception as e:
     st.error(
-        f"""The app has encountered an error:  
-        `{e}`  
-        Please create an issue [here](https://github.com/SiddhantSadangi/pdf-workdesk/issues/new) 
-        with the below traceback""",
-        icon="🥺",
+        f"""The app has encountered an error:"""
     )
     st.code(traceback.format_exc())
+
+st.success(
+    "",
+)
