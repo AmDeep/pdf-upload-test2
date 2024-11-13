@@ -236,19 +236,3 @@ if uploaded_file is not None:
 
         if questions:
             st.write("\n".join(questions))
-
-except Exception as e:
-    st.error(
-        f"""The app has encountered an error:  
-        `{e}`  
-        Please create an issue [here](https://github.com/SiddhantSadangi/pdf-workdesk/issues/new) 
-        with the below traceback""",
-        icon="🥺",
-    )
-    st.code(traceback.format_exc())
-
-# Success message for the user
-st.success(
-    "[Star the repo](https://github.com/SiddhantSadangi/pdf-workdesk) to show your :heart:!",
-    icon="⭐",
-)
