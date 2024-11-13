@@ -76,7 +76,7 @@ def generate_dynamic_questions(text, term):
 
 # Function to extract text from PDF (including tables)
 def extract_text_from_pdf(pdf_file):
-    pdf_document = fitz.open(stream=pdf_file.read(), filetype="pdf")
+    pdf_document = fitz.open(pdf_file)
     text = ""
     for page_num in range(pdf_document.page_count):
         page = pdf_document.load_page(page_num)
@@ -85,7 +85,7 @@ def extract_text_from_pdf(pdf_file):
 
 # Function to extract tables from PDF (using layout-based approach)
 def extract_tables_from_pdf(pdf_file):
-    pdf_document = fitz.open(stream=pdf_file.read(), filetype="pdf")
+    pdf_document = fitz.open(pdf_file)
     tables = []
     
     for page_num in range(pdf_document.page_count):
@@ -146,8 +146,14 @@ uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 if uploaded_file is not None:
     st.write(f"File: {uploaded_file.name}")
     
+    # Read the file content as bytes
+    pdf_bytes = uploaded_file.read()
+
+    # Convert PDF bytes to a BytesIO stream
+    pdf_stream = io.BytesIO(pdf_bytes)
+    
     # Extract text from the uploaded PDF
-    extracted_text = extract_text_from_pdf(uploaded_file)
+    extracted_text = extract_text_from_pdf(pdf_stream)
 
     # Clean the extracted text
     cleaned_text = clean_text(extracted_text)
@@ -191,7 +197,7 @@ if uploaded_file is not None:
         st.write(f"No related terms found for '{custom_term}' in the document.")
 
     # Extract tables from the PDF
-    tables = extract_tables_from_pdf(uploaded_file)
+    tables = extract_tables_from_pdf(pdf_stream)
     
     if tables:
         st.subheader("Table Preview (First 3 Tables)")
