@@ -7,7 +7,8 @@ from collections import Counter
 from io import BytesIO
 
 import streamlit as st
-from pypdf import PdfReader, PdfWriter, FileNotDecryptedError
+from pypdf import PaperSize, PdfReader, PdfWriter, Transformation
+from pypdf.errors import FileNotDecryptedError
 from streamlit_pdf_viewer import pdf_viewer
 from utils import helpers, init_session_states, page_config
 
