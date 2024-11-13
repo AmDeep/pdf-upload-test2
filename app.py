@@ -26,7 +26,8 @@ try:
 
     # ---------- OPERATIONS ----------
     try:
-        pdf, reader = helpers.load_pdf(key="main")
+        # Modify this line based on the correct unpacking of returned values
+        pdf, reader, *other_values = helpers.load_pdf(key="main")
 
     except FileNotDecryptedError:
         pdf = "password_required"
@@ -229,10 +230,8 @@ try:
             with lcol:
                 remove_duplication = st.checkbox(
                     "Remove duplication",
-                    help="""Some PDF documents contain the same object multiple times.  
-                    For example, if an image appears three times in a PDF it could be embedded three times. 
-                    Or it can be embedded once and referenced twice.  
-                    **Note:** This option will not remove objects, rather it will use a reference to the original object for subsequent uses."""
+                    help="""...
+                    """
                 )
 
                 remove_images = st.checkbox(
@@ -243,13 +242,13 @@ try:
                 if remove_images or remove_duplication:
                     pdf_small = helpers.remove_images(
                         pdf,
-                        remove_images=remove_images
+                        remove_images=remove_images,
                     )
 
                 if st.checkbox(
                     "Reduce image quality",
-                    help="""Reduce the quality of images in the PDF. Will also remove duplication.  
-                    May not work for all cases.""",
+                    help="""...
+                    """,
                     disabled=remove_images,
                 ):
                     quality = st.slider(
@@ -261,7 +260,7 @@ try:
                     )
                     pdf_small = helpers.reduce_image_quality(
                         pdf_small,
-                        quality
+                        quality,
                     )
 
                 if st.checkbox(
@@ -269,7 +268,7 @@ try:
                     help="Compress PDF without losing quality",
                 ):
                     pdf_small = helpers.compress_pdf(
-                        pdf_small
+                        pdf_small,
                     )
 
                 original_size = sys.getsizeof(pdf)
