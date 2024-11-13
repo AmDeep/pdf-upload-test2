@@ -91,6 +91,76 @@ def extract_text_from_pdf(pdf_file):
     
     return text
 
+# Function to generate dynamic question prompts based on the extracted term
+def generate_dynamic_questions(text, term):
+    term = term.lower()
+    
+    # Extract contextual relationships
+    context_data = extract_contextual_relationships(text, term)
+    
+    # Generate dynamic questions based on context
+    questions = []
+    if context_data:
+        questions.append(f"What is mentioned about '{term}' in the document?")
+        questions.append(f"Can you provide examples of '{term}' being discussed in the document?")
+        
+        # Check for policy, rules, or definitions
+        if any("requirement" in sentence.lower() for sentence in [entry['sentence'] for entry in context_data]):
+            questions.append(f"What requirements or rules are associated with '{term}'?")
+        
+        if any("defined" in sentence.lower() for sentence in [entry['sentence'] for entry in context_data]):
+            questions.append(f"How is '{term}' defined in the document?")
+        
+        # Comparative questions if term appears in multiple contexts
+        if len(context_data) > 1:
+            questions.append(f"How does the discussion of '{term}' differ in various sections of the document?")
+    
+    return questions
+
+# Function to generate contextual response to a question
+def generate_response_to_question(text, question, term):
+    term = term.lower()
+    
+    # Extract contextual relationships
+    context_data = extract_contextual_relationships(text, term)
+    
+    # Identify question type and generate smart, context-aware responses
+    if "about" in question or "what" in question.lower():
+        if context_data:
+            response = f"The document discusses '{term}' in various contexts: "
+            for entry in context_data:
+                response += f"\n- In the sentence: '{entry['sentence']}', related terms are {', '.join(entry['related_terms'])}."
+            return response
+        else:
+            return f"'{term}' is only briefly mentioned or not fully explored in the document."
+
+    elif "examples" in question.lower():
+        examples = [entry['sentence'] for entry in context_data if "example" in entry['sentence'].lower()]
+        if examples:
+            return f"Here is an example of '{term}' in the document: {examples[0]}"
+        else:
+            return f"No clear examples of '{term}' were found in the document."
+
+    elif "requirements" in question.lower() or "rules" in question.lower():
+        requirements = [entry['sentence'] for entry in context_data if "requirement" in entry['sentence'].lower()]
+        if requirements:
+            return f"'{term}' is associated with specific eligibility requirements, such as {requirements[0]}"
+        else:
+            return f"No specific eligibility requirements related to '{term}' were found in the document."
+
+    elif "defined" in question.lower():
+        definitions = [entry['sentence'] for entry in context_data if "defined" in entry['sentence'].lower()]
+        if definitions:
+            return f"'{term}' is defined in the document as: {definitions[0]}"
+        else:
+            return f"'{term}' is not explicitly defined in the document."
+
+    elif "different" in question.lower() and len(context_data) > 1:
+        return f"Across different sections, '{term}' is discussed from various perspectives, such as eligibility conditions, examples of qualifying factors, and eligibility rules."
+
+    else:
+        return f"The document offers a detailed exploration of '{term}', providing insight into its significance in relation to other policy terms."
+
 # Streamlit interface
 st.title("PDF Text Extractor and Table Extraction")
 st.write("Upload a PDF file to extract its text, tables, and analyze content based on a custom term.")
