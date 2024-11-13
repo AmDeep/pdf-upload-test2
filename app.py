@@ -7,10 +7,9 @@ try:
     import streamlit as st
     from pypdf import PaperSize, PdfReader, PdfWriter, Transformation
     from pypdf.errors import FileNotDecryptedError
-    from streamlit import session_state
     from streamlit_pdf_viewer import pdf_viewer
 
-    from utils import helpers, init_session_states, page_config, render_sidebar
+    from utils import helpers, init_session_states, page_config
 
     page_config.set()
 
@@ -22,20 +21,12 @@ try:
 
     init_session_states.init()
 
-    render_sidebar.render()
+    # Removed the sidebar rendering function call
+    # render_sidebar.render()
 
     # ---------- OPERATIONS ----------
-    # TODO: Extract attachments (https://pypdf.readthedocs.io/en/stable/user/extract-attachments.html)
-    # TODO: Undo last operation
-    # TODO: Update metadata (https://pypdf.readthedocs.io/en/stable/user/metadata.html)
-
     try:
-        (
-            pdf,
-            reader,
-            session_state["password"],
-            session_state["is_encrypted"],
-        ) = helpers.load_pdf(key="main")
+        pdf, reader = helpers.load_pdf(key="main")
 
     except FileNotDecryptedError:
         pdf = "password_required"
@@ -44,6 +35,7 @@ try:
         st.error("PDF is password protected. Please enter the password to proceed.")
     elif pdf:
         lcol, rcol = st.columns(2)
+        
         with lcol.expander(label="🔍 Extract text"):
             extract_text_lcol, extract_text_rcol = st.columns(2)
 
@@ -115,60 +107,7 @@ try:
                     use_container_width=True,
                 )
 
-        with lcol.expander(
-            f"🔐 {'Change' if session_state['is_encrypted'] else 'Add'} password"
-        ):
-            new_password = st.text_input(
-                "Enter password",
-                type="password",
-            )
-
-            algorithm = st.selectbox(
-                "Algorithm",
-                options=["RC4-40", "RC4-128", "AES-128", "AES-256-R5", "AES-256"],
-                index=3,
-                help="Use `RC4` for compatibility and `AES` for security",
-            )
-
-            filename = f"protected_{session_state['name']}"
-
-            if st.button(
-                "🔒 Submit",
-                use_container_width=True,
-                disabled=(len(new_password) == 0),
-            ):
-                with PdfWriter() as writer:
-                    # Add all pages to the writer
-                    for page in reader.pages:
-                        writer.add_page(page)
-
-                    # Add a password to the new PDF
-                    writer.encrypt(new_password, algorithm=algorithm)
-
-                    # Save the new PDF to a file
-                    with open(filename, "wb") as f:
-                        writer.write(f)
-
-            if os.path.exists(filename):
-                st.download_button(
-                    "📥 Download protected PDF",
-                    data=open(filename, "rb"),
-                    mime="application/pdf",
-                    file_name=filename,
-                    use_container_width=True,
-                )
-
-        with rcol.expander("🔓 Remove password"):
-            if reader.is_encrypted:
-                st.download_button(
-                    "📥 Download unprotected PDF",
-                    data=open(session_state["decrypted_filename"], "rb"),
-                    mime="application/pdf",
-                    file_name=session_state["decrypted_filename"],
-                    use_container_width=True,
-                )
-            else:
-                st.info("PDF does not have a password")
+        # Removed password-related operations here
 
         with lcol.expander("🔃 Rotate PDF"):
             # TODO: Add password back to converted PDF if original was protected
@@ -211,7 +150,7 @@ try:
                     and not callable(getattr(PaperSize, attr))
                 },
                 index=4,
-                help="Changes will be apparant only on printing the PDF",
+                help="Changes will be apparent only on printing the PDF",
             )
 
             scale_content = st.slider(
@@ -247,35 +186,6 @@ try:
                         file_name=f"{session_state['name'].rsplit('.')[0]}_scaled_{new_size}_{scale_content}x.pdf",
                         use_container_width=True,
                     )
-
-        # with st.expander("©️ Add watermark"):
-        # TODO: Add watermark (convert pdf to image and then back to pdf with watermark)
-        #     # TODO: Transform watermark before adding (https://pypdf.readthedocs.io/en/stable/user/add-watermark.html#stamp-overlay-watermark-underlay)
-
-        #     col1, col2 = st.columns(2)
-
-        #     image = col1.file_uploader(
-        #         "Upload image",
-        #         type=["png", "jpg", "jpeg", "webp", "bmp"],
-        #     )
-
-        #     if image:
-        #         col2.image(image, caption="Uploaded image", use_column_width=True)
-
-        #         utils.watermark_img(
-        #             reader,
-        #             image,
-        #         )
-
-        #         pdf_viewer("watermarked.pdf", height=400, width=500)
-
-        #         st.download_button(
-        #             "📥 Download watermarked PDF",
-        #             data=open("watermarked.pdf", "rb"),
-        #             mime="application/pdf",
-        #             file_name="watermarked.pdf",
-        #             use_container_width=True,
-        #         )
 
         with lcol.expander("➕ Merge PDFs"):
             # TODO: Add password back to converted PDF if original was protected
@@ -319,12 +229,10 @@ try:
             with lcol:
                 remove_duplication = st.checkbox(
                     "Remove duplication",
-                    help="""
-                    Some PDF documents contain the same object multiple times.  
+                    help="""Some PDF documents contain the same object multiple times.  
                     For example, if an image appears three times in a PDF it could be embedded three times. 
                     Or it can be embedded once and referenced twice.  
-                    **Note:** This option will not remove objects, rather it will use a reference to the original object for subsequent uses.
-                    """,
+                    **Note:** This option will not remove objects, rather it will use a reference to the original object for subsequent uses."""
                 )
 
                 remove_images = st.checkbox(
@@ -335,16 +243,13 @@ try:
                 if remove_images or remove_duplication:
                     pdf_small = helpers.remove_images(
                         pdf,
-                        remove_images=remove_images,
-                        password=session_state.password,
+                        remove_images=remove_images
                     )
 
                 if st.checkbox(
                     "Reduce image quality",
-                    help="""
-                    Reduce the quality of images in the PDF. Will also remove duplication.  
-                    May not work for all cases.
-                    """,
+                    help="""Reduce the quality of images in the PDF. Will also remove duplication.  
+                    May not work for all cases.""",
                     disabled=remove_images,
                 ):
                     quality = st.slider(
@@ -356,8 +261,7 @@ try:
                     )
                     pdf_small = helpers.reduce_image_quality(
                         pdf_small,
-                        quality,
-                        password=session_state.password,
+                        quality
                     )
 
                 if st.checkbox(
@@ -365,7 +269,7 @@ try:
                     help="Compress PDF without losing quality",
                 ):
                     pdf_small = helpers.compress_pdf(
-                        pdf_small, password=session_state.password
+                        pdf_small
                     )
 
                 original_size = sys.getsizeof(pdf)
@@ -379,16 +283,14 @@ try:
                 helpers.preview_pdf(
                     reader,
                     pdf,
-                    key="other",
-                    password=session_state.password,
+                    key="other"
                 )
             with rcol:
                 st.caption(f"Reduced size: {reduced_size / 1024:.2f} KB")
                 helpers.preview_pdf(
                     PdfReader(BytesIO(pdf_small)),
                     pdf_small,
-                    key="other",
-                    password=session_state.password,
+                    key="other"
                 )
             st.download_button(
                 "📥 Download smaller PDF",
