@@ -141,7 +141,9 @@ try:
                         file_name=f"{st.session_state['name'].rsplit('.')[0]}_rotated_{angle}.pdf",
                         use_container_width=True,
                     )
+
 except Exception as e:
+    # Error handling for any issues in the try block
     st.error(
         f"""The app has encountered an error:  
         `{e}`  
@@ -247,6 +249,6 @@ except Exception as e:
 
 # Success message for the user
 st.success(
-    "[Star the repo](https://github.com/SiddhantSadangi/pdf-workdesk) to show your :heart: ",
+    "[Star the repo](https://github.com/SiddhantSadangi/pdf-workdesk) to show your :heart:!",
     icon="⭐",
 )
