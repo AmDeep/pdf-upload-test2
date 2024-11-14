@@ -10,6 +10,7 @@ import pdfplumber
 from pypdf import PdfReader
 from pypdf.errors import FileNotDecryptedError
 from streamlit import session_state
+from collections import Counter  # <-- Add this import for the Counter class
 from utils import helpers, init_session_states, page_config
 
 # Set up the page config
@@ -248,7 +249,7 @@ try:
                             page_numbers = []
                     if page_numbers:
                         st.write(f"Extracting tables from pages: {page_numbers}")
-                        extract_tables(uploaded_file, page_input)  # Extract tables and show preview
+                        extract_tables_from_pdf(pdf_reader, page_numbers)
                     else:
                         st.warning("No valid pages selected for table extraction.")
 
