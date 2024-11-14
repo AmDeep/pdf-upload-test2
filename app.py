@@ -33,21 +33,26 @@ uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
 @st.cache_data
 def parse_page_numbers(page_numbers_str):
-    if isinstance(page_numbers_str, list):
-        page_numbers_str = ",".join(map(str, page_numbers_str))
-
+    # Split the input string by comma or hyphen
     parts = page_numbers_str.split(",")
+
+    # Initialize an empty list to store parsed page numbers
     parsed_page_numbers = []
 
+    # Iterate over each part
     for part in parts:
+        # Remove any leading/trailing spaces
         part = part.strip()
+
+        # If the part contains a hyphen, it represents a range
         if "-" in part:
             start, end = map(int, part.split("-"))
             parsed_page_numbers.extend(range(start, end + 1))
         else:
+            # Otherwise, it's a single page number
             parsed_page_numbers.append(int(part))
 
-    return [i - 1 for i in parsed_page_numbers]  # Convert to 0-based indexing
+    return [i - 1 for i in parsed_page_numbers]
 
 
 # Function to extract tables and preview pages from PDF
