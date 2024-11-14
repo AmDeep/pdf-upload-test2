@@ -161,7 +161,8 @@ try:
                         page_numbers = list(range(len(pdf_reader.pages)))
                     else:
                         try:
-                            page_numbers = helpers.parse_page_numbers(page_input, len(pdf_reader.pages))
+                            # Fix applied: pass only the page_input string to parse_page_numbers
+                            page_numbers = helpers.parse_page_numbers(page_input)
                         except ValueError:
                             st.error("Invalid page numbers format. Please enter a valid page range or 'all'.")
                             page_numbers = []
