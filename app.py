@@ -75,8 +75,8 @@ try:
             cleaned_text = clean_text(extracted_text)
 
             # Display the extracted and cleaned text
-            st.subheader("Extracted Text")
-            st.text_area("Text", cleaned_text, height=200)
+            ##st.subheader("Extracted Text")
+            ##st.text_area("Text", cleaned_text, height=200)
 
             # Input for custom term to search for
             custom_term = st.text_input("Enter a term to analyze (e.g., 'eligibility')", "eligibility")
@@ -133,8 +133,8 @@ try:
                 return Counter(tokens)
 
             vectorized_text = vectorize(cleaned_text)
-            st.subheader("Word Frequency (Bag of Words)")
-            st.write(vectorized_text)
+            ##st.subheader("Word Frequency (Bag of Words)")
+            ##st.write(vectorized_text)
 
 
 
