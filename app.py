@@ -10,7 +10,7 @@ try:
     from streamlit import session_state
     from streamlit_pdf_viewer import pdf_viewer
 
-    from utils import helpers, init_session_states, page_config, render_sidebar
+    from utils import helpers, init_session_states, page_config
 
     page_config.set()
 
@@ -22,7 +22,6 @@ try:
 
     init_session_states.init()
 
-    render_sidebar.render()
 
     # ---------- OPERATIONS ----------
     # TODO: Extract attachments (https://pypdf.readthedocs.io/en/stable/user/extract-attachments.html)
