@@ -1,49 +1,49 @@
-import os
-import sys
-import traceback
-from io import BytesIO
-
-import streamlit as st
-import fitz  # PyMuPDF
-import re
-from collections import Counter
-from pypdf.errors import FileNotDecryptedError
-from streamlit_pdf_viewer import pdf_viewer
-
-from utils import helpers, init_session_states, page_config
-
-# Set up page config
-page_config.set()
-
-# Initialize session_state variables if they don't exist
-if "file" not in st.session_state:
-    st.session_state["file"] = None
-if "name" not in st.session_state:
-    st.session_state["name"] = ""
-if "password" not in st.session_state:
-    st.session_state["password"] = ""
-if "is_encrypted" not in st.session_state:
-    st.session_state["is_encrypted"] = False
-
-# ---------- HEADER ----------
-st.title("📄 PDF WorkDesk!")
-st.write(
-    "User-friendly, lightweight, and open-source tool to preview and extract content and metadata from PDFs, "
-    "add or remove passwords, modify, merge, convert and compress PDFs."
-)
-
-init_session_states.init()
-
-# ---------- OPERATIONS ----------
 try:
-    # Loading the PDF file (handling password protection)
-    pdf, reader, *other_values = helpers.load_pdf(key="main")
+    import os
+    import sys
+    import traceback
+    from io import BytesIO
+
+    import streamlit as st
+    from pypdf import PaperSize, PdfReader, PdfWriter, Transformation
+    from pypdf.errors import FileNotDecryptedError
+    from streamlit import session_state
+    from streamlit_pdf_viewer import pdf_viewer
+
+    from utils import helpers, init_session_states, page_config, render_sidebar
+
+    page_config.set()
+
+    # ---------- HEADER ----------
+    st.title("📄 PDF WorkDesk!")
+    st.write(
+        "User-friendly, lightweight, and open-source tool to preview and extract content and metadata from PDFs, add or remove passwords, modify, merge, convert and compress PDFs."
+    )
+
+    init_session_states.init()
+
+    render_sidebar.render()
+
+    # ---------- OPERATIONS ----------
+    # TODO: Extract attachments (https://pypdf.readthedocs.io/en/stable/user/extract-attachments.html)
+    # TODO: Undo last operation
+    # TODO: Update metadata (https://pypdf.readthedocs.io/en/stable/user/metadata.html)
+
+    try:
+        (
+            pdf,
+            reader,
+            session_state["password"],
+            session_state["is_encrypted"],
+        ) = helpers.load_pdf(key="main")
+
+    except FileNotDecryptedError:
+        pdf = "password_required"
 
     if pdf == "password_required":
         st.error("PDF is password protected. Please enter the password to proceed.")
-    else:
+    elif pdf:
         lcol, rcol = st.columns(2)
-
         with lcol.expander(label="🔍 Extract text"):
             extract_text_lcol, extract_text_rcol = st.columns(2)
 
@@ -99,7 +99,7 @@ try:
                 key="extract_table_pages",
             ):
                 helpers.extract_tables(
-                    st.session_state["file"],  # Use session_state["file"]
+                    session_state["file"],
                     page_numbers_str,
                 )
 
@@ -110,12 +110,68 @@ try:
                 st.download_button(
                     "📥 Download Word document",
                     data=helpers.convert_pdf_to_word(pdf),
-                    file_name=f"{st.session_state['name'][:-4]}.docx",
+                    file_name=f"{session_state['name'][:-4]}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     use_container_width=True,
                 )
 
+        with lcol.expander(
+            f"🔐 {'Change' if session_state['is_encrypted'] else 'Add'} password"
+        ):
+            new_password = st.text_input(
+                "Enter password",
+                type="password",
+            )
+
+            algorithm = st.selectbox(
+                "Algorithm",
+                options=["RC4-40", "RC4-128", "AES-128", "AES-256-R5", "AES-256"],
+                index=3,
+                help="Use `RC4` for compatibility and `AES` for security",
+            )
+
+            filename = f"protected_{session_state['name']}"
+
+            if st.button(
+                "🔒 Submit",
+                use_container_width=True,
+                disabled=(len(new_password) == 0),
+            ):
+                with PdfWriter() as writer:
+                    # Add all pages to the writer
+                    for page in reader.pages:
+                        writer.add_page(page)
+
+                    # Add a password to the new PDF
+                    writer.encrypt(new_password, algorithm=algorithm)
+
+                    # Save the new PDF to a file
+                    with open(filename, "wb") as f:
+                        writer.write(f)
+
+            if os.path.exists(filename):
+                st.download_button(
+                    "📥 Download protected PDF",
+                    data=open(filename, "rb"),
+                    mime="application/pdf",
+                    file_name=filename,
+                    use_container_width=True,
+                )
+
+        with rcol.expander("🔓 Remove password"):
+            if reader.is_encrypted:
+                st.download_button(
+                    "📥 Download unprotected PDF",
+                    data=open(session_state["decrypted_filename"], "rb"),
+                    mime="application/pdf",
+                    file_name=session_state["decrypted_filename"],
+                    use_container_width=True,
+                )
+            else:
+                st.info("PDF does not have a password")
+
         with lcol.expander("🔃 Rotate PDF"):
+            # TODO: Add password back to converted PDF if original was protected
             st.caption("Will remove password if present")
             angle = st.slider(
                 "Clockwise angle",
@@ -130,6 +186,7 @@ try:
                     writer.add_page(page)
                     writer.pages[-1].rotate(angle)
 
+                # TODO: Write to byte_stream
                 writer.write("rotated.pdf")
 
                 with open("rotated.pdf", "rb") as f:
@@ -138,101 +195,205 @@ try:
                         "📥 Download rotated PDF",
                         data=f,
                         mime="application/pdf",
-                        file_name=f"{st.session_state['name'].rsplit('.')[0]}_rotated_{angle}.pdf",
+                        file_name=f"{session_state['name'].rsplit('.')[0]}_rotated_{angle}.pdf",
                         use_container_width=True,
                     )
 
-except Exception as e:
-    # Error handling for any issues in the try block
-    st.error(
-        f"""The app has encountered an error:  
-        `{e}`  
-        Please create an issue [here](https://github.com/SiddhantSadangi/pdf-workdesk/issues/new) 
-        with the below traceback""",
-        icon="🥺",
-    )
-    st.code(traceback.format_exc())
+        with rcol.expander("↔ Resize/Scale PDF"):
+            # TODO: Add password back to converted PDF if original was protected
+            st.caption("Will remove password if present")
+            new_size = st.selectbox(
+                "New size",
+                options={
+                    attr: getattr(PaperSize, attr)
+                    for attr in dir(PaperSize)
+                    if not attr.startswith("__")
+                    and not callable(getattr(PaperSize, attr))
+                },
+                index=4,
+                help="Changes will be apparant only on printing the PDF",
+            )
 
-# Custom Term Analysis Operations
-def extract_text_from_pdf(pdf_file):
-    """Extracts text from a PDF file."""
-    pdf_document = fitz.open(stream=pdf_file, filetype="pdf")  # Directly use the bytes stream
-    text = ""
+            scale_content = st.slider(
+                "Scale content",
+                min_value=0.1,
+                max_value=2.0,
+                step=0.1,
+                value=1.0,
+                help="Scale content independently of the page size",
+                format="%fx",
+            )
 
-    for page_num in range(pdf_document.page_count):
-        page = pdf_document.load_page(page_num)
-        text += page.get_text("text")
+            with PdfWriter() as writer:
+                for page in reader.pages:
+                    page.scale_to(
+                        width=getattr(PaperSize, new_size).width,
+                        height=getattr(PaperSize, new_size).height,
+                    )
+                    op = Transformation().scale(sx=scale_content, sy=scale_content)
+                    page.add_transformation(op)
+                    writer.add_page(page)
 
-    return text
+                # TODO: Write to byte_stream
+                writer.write("scaled.pdf")
 
+                with open("scaled.pdf", "rb") as f:
+                    st.caption("Content scaling preview")
+                    pdf_viewer(f.read(), height=250, width=300)
+                    st.download_button(
+                        "📥 Download scaled PDF",
+                        data=f,
+                        mime="application/pdf",
+                        file_name=f"{session_state['name'].rsplit('.')[0]}_scaled_{new_size}_{scale_content}x.pdf",
+                        use_container_width=True,
+                    )
 
-# Custom Term Analysis: Extract related terms
-def extract_related_terms(text, term):
-    term = term.lower()
-    related_terms = set()
-    
-    words = text.split()
-    for word in words:
-        if term in word.lower() and word.lower() != term:
-            related_terms.add(word)
-    
-    return list(related_terms)
+        # with st.expander("©️ Add watermark"):
+        # TODO: Add watermark (convert pdf to image and then back to pdf with watermark)
+        #     # TODO: Transform watermark before adding (https://pypdf.readthedocs.io/en/stable/user/add-watermark.html#stamp-overlay-watermark-underlay)
 
+        #     col1, col2 = st.columns(2)
 
-# Custom Term Analysis: Full lines containing the custom term
-def print_full_lines_with_term(extracted_text, term, page_info):
-    term = term.lower()
-    full_lines_with_term = []
-    
-    lines = extracted_text.split('\n')
-    for line in lines:
-        if term in line.lower():
-            page_num = page_info.get(line.strip(), "Unknown page")
-            
-            if isinstance(page_num, int):
-                page_num = str(page_num + 1)  # Convert to 1-based indexing
-            
-            full_line = line.replace(term, f"**_{term}_**")
-            full_lines_with_term.append(f"Page {page_num}: {full_line}")  # Ensure page_num is properly formatted as a string
-    
-    return "\n".join(full_lines_with_term)
+        #     image = col1.file_uploader(
+        #         "Upload image",
+        #         type=["png", "jpg", "jpeg", "webp", "bmp"],
+        #     )
 
+        #     if image:
+        #         col2.image(image, caption="Uploaded image", use_column_width=True)
 
-# Main Streamlit app interface
-st.title("PDF Text Extractor and Contextual Analysis")
-st.write("Upload a PDF file to extract its text, clean it, and analyze content based on a custom term.")
+        #         utils.watermark_img(
+        #             reader,
+        #             image,
+        #         )
 
-# File uploader widget
-uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+        #         pdf_viewer("watermarked.pdf", height=400, width=500)
 
-if uploaded_file is not None:
-    st.write(f"File: {uploaded_file.name}")
-    
-    # Extract text from the uploaded PDF
-    extracted_text = extract_text_from_pdf(uploaded_file)
+        #         st.download_button(
+        #             "📥 Download watermarked PDF",
+        #             data=open("watermarked.pdf", "rb"),
+        #             mime="application/pdf",
+        #             file_name="watermarked.pdf",
+        #             use_container_width=True,
+        #         )
 
-    # Clean the extracted text
-    cleaned_text = helpers.clean_text(extracted_text)
+        with lcol.expander("➕ Merge PDFs"):
+            # TODO: Add password back to converted PDF if original was protected
+            st.caption(
+                "Second PDF will be appended to the first. Passwords will be removed from both."
+            )
+            # TODO: Add more merge options (https://pypdf.readthedocs.io/en/stable/user/merging-pdfs.html#showing-more-merging-options)
+            pdf_to_merge, reader_to_merge, *_ = helpers.load_pdf(key="merge")
 
-    # Input for custom term (e.g., "eligibility")
-    custom_term = st.text_input("Enter a term to summarize references (e.g., 'eligibility')", "eligibility")
+            if st.button(
+                "➕ Merge PDFs", disabled=(not pdf_to_merge), use_container_width=True
+            ):
+                with PdfWriter() as merger:
+                    for file in (reader, reader_to_merge):
+                        merger.append(file)
 
-    if custom_term:
-        # Extract full lines with the custom term
-        full_lines = print_full_lines_with_term(extracted_text, custom_term, page_info={})
-        st.subheader(f"Full Lines Containing '{custom_term.capitalize()}'")
-        st.write(full_lines)
+                    # TODO: Write to byte_stream
+                    merger.write("merged.pdf")
 
-        # Extract related terms
-        related_terms = extract_related_terms(extracted_text, custom_term)
-        st.subheader(f"Related Terms to '{custom_term.capitalize()}'")
+                    pdf_viewer(
+                        open("merged.pdf", "rb").read(),
+                        height=250,
+                        width=300,
+                    )
+                    st.download_button(
+                        "📥 Download merged PDF",
+                        data=open("merged.pdf", "rb"),
+                        mime="application/pdf",
+                        file_name="merged.pdf",
+                        use_container_width=True,
+                    )
 
-        if related_terms:
-            st.write(f"Related terms found in the document: {', '.join(related_terms)}")
+        with st.expander("🤏 Reduce PDF size"):
+            # TODO: Add password back to converted PDF if original was protected
+            st.caption("Will remove password if present")
 
-        # Generate dynamic questions
-        questions = generate_dynamic_questions(extracted_text, custom_term)
-        st.subheader(f"Generated Questions for '{custom_term.capitalize()}'")
+            pdf_small = pdf
 
-        if questions:
-            st.write("\n".join(questions))
+            lcol, mcol, rcol = st.columns(3)
+
+            with lcol:
+                remove_duplication = st.checkbox(
+                    "Remove duplication",
+                    help="""
+                    Some PDF documents contain the same object multiple times.  
+                    For example, if an image appears three times in a PDF it could be embedded three times. 
+                    Or it can be embedded once and referenced twice.  
+                    **Note:** This option will not remove objects, rather it will use a reference to the original object for subsequent uses.
+                    """,
+                )
+
+                remove_images = st.checkbox(
+                    "Remove images",
+                    help="Remove images from the PDF. Will also remove duplication.",
+                )
+
+                if remove_images or remove_duplication:
+                    pdf_small = helpers.remove_images(
+                        pdf,
+                        remove_images=remove_images,
+                        password=session_state.password,
+                    )
+
+                if st.checkbox(
+                    "Reduce image quality",
+                    help="""
+                    Reduce the quality of images in the PDF. Will also remove duplication.  
+                    May not work for all cases.
+                    """,
+                    disabled=remove_images,
+                ):
+                    quality = st.slider(
+                        "Quality",
+                        min_value=0,
+                        max_value=100,
+                        value=50,
+                        disabled=remove_images,
+                    )
+                    pdf_small = helpers.reduce_image_quality(
+                        pdf_small,
+                        quality,
+                        password=session_state.password,
+                    )
+
+                if st.checkbox(
+                    "Lossless compression",
+                    help="Compress PDF without losing quality",
+                ):
+                    pdf_small = helpers.compress_pdf(
+                        pdf_small, password=session_state.password
+                    )
+
+                original_size = sys.getsizeof(pdf)
+                reduced_size = sys.getsizeof(pdf_small)
+                st.caption(
+                    f"Reduction: {100 - (reduced_size / original_size) * 100:.2f}%"
+                )
+
+            with mcol:
+                st.caption(f"Original size: {original_size / 1024:.2f} KB")
+                helpers.preview_pdf(
+                    reader,
+                    pdf,
+                    key="other",
+                    password=session_state.password,
+                )
+            with rcol:
+                st.caption(f"Reduced size: {reduced_size / 1024:.2f} KB")
+                helpers.preview_pdf(
+                    PdfReader(BytesIO(pdf_small)),
+                    pdf_small,
+                    key="other",
+                    password=session_state.password,
+                )
+            st.download_button(
+                "📥 Download smaller PDF",
+                data=pdf_small,
+                mime="application/pdf",
+                file_name=f"{filename}_reduced.pdf",
+                use_container_width=True,
+            )
