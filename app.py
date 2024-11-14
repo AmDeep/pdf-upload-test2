@@ -6,11 +6,14 @@ import streamlit as st
 import fitz  # PyMuPDF
 import re
 from collections import Counter
+import pdfplumber
+import pandas as pd
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import FileNotDecryptedError
 from streamlit import session_state
 from streamlit_pdf_viewer import pdf_viewer
 from utils import helpers, init_session_states, page_config
+from typing import Literal
 
 # Set up the page config
 page_config.set()
@@ -44,6 +47,122 @@ def convert_table_to_csv(table):
     writer = csv.writer(output)
     writer.writerows(table)
     return output.getvalue()
+
+# Updated functions for extracting text, images, and tables
+
+@st.cache_data
+def parse_page_numbers(page_numbers_str):
+    # Split the input string by comma or hyphen
+    parts = page_numbers_str.split(",")
+
+    # Initialize an empty list to store parsed page numbers
+    parsed_page_numbers = []
+
+    # Iterate over each part
+    for part in parts:
+        # Remove any leading/trailing spaces
+        part = part.strip()
+
+        # If the part contains a hyphen, it represents a range
+        if "-" in part:
+            start, end = map(int, part.split("-"))
+            parsed_page_numbers.extend(range(start, end + 1))
+        else:
+            # Otherwise, it's a single page number
+            parsed_page_numbers.append(int(part))
+
+    return [i - 1 for i in parsed_page_numbers]
+
+
+def extract_text(
+    reader: PdfReader.pages,
+    page_numbers_str: str = "all",
+    mode: Literal["plain", "layout"] = "plain",
+) -> str:
+    text = ""
+
+    if page_numbers_str == "all":
+        for page in reader.pages:
+            text = text + " " + page.extract_text(extraction_mode=mode)
+    else:
+        pages = parse_page_numbers(page_numbers_str)
+        for page in pages:
+            text = text + " " + reader.pages[page].extract_text()
+
+    return text
+
+
+def extract_images(reader: PdfReader.pages, page_numbers_str: str = "all") -> str:
+    images = {}
+    if page_numbers_str == "all":
+        for page in reader.pages:
+            images |= {image.data: image.name for image in page.images}
+
+    else:
+        pages = parse_page_numbers(page_numbers_str)
+        for page in pages:
+            images.update(
+                {image.data: image.name for image in reader.pages[page].images}
+            )
+
+    return images
+
+
+def extract_tables(file, page_numbers_str):
+    st.caption(
+        "Adjust vertical and horizontal strategies for better extraction. Read details about the strategies [here](https://github.com/jsvine/pdfplumber?tab=readme-ov-file#table-extraction-strategies)."
+    )
+    col0, col1 = st.columns(2)
+    vertical_strategy = col0.selectbox(
+        "Vertical strategy",
+        ["lines", "lines_strict", "text"],
+        index=2,
+    )
+    horizontal_strategy = col1.selectbox(
+        "Horizontal strategy",
+        ["lines", "lines_strict", "text"],
+        index=2,
+    )
+
+    header = st.checkbox("Header")
+
+    first_row_index = 1 if header else 0
+
+    with pdfplumber.open(
+        BytesIO(file) if isinstance(file, bytes) else file,
+        password=session_state["password"],
+    ) as table_pdf:
+        if page_numbers_str == "all":
+            for page in table_pdf.pages:
+                for table in page.extract_tables(
+                    {
+                        "vertical_strategy": vertical_strategy,
+                        "horizontal_strategy": horizontal_strategy,
+                    }
+                ):
+                    st.write(
+                        pd.DataFrame(
+                            table[first_row_index:],
+                            columns=table[0] if header else None,
+                        )
+                    )
+        else:
+            pages = parse_page_numbers(page_numbers_str)
+            for page in pages:
+                for page in table_pdf.pages[page : page + 1]:
+                    for table in page.extract_tables(
+                        {
+                            "vertical_strategy": vertical_strategy,
+                            "horizontal_strategy": horizontal_strategy,
+                        }
+                    ):
+                        st.write(
+                            pd.DataFrame(
+                                table[first_row_index:],
+                                columns=table[0] if header else None,
+                            )
+                        )
+
 
 try:
     if uploaded_file is not None:
@@ -143,7 +262,7 @@ try:
                     key="extract_image_pages",
                 ):
                     try:
-                        images = helpers.extract_images(pdf_reader, page_numbers_str)
+                        images = extract_images(pdf_reader, page_numbers_str)
                     except (IndexError, ValueError):
                         st.error("Specified pages don't exist. Check the format.", icon="⚠️")
                     else:
@@ -161,7 +280,6 @@ try:
                         page_numbers = list(range(len(pdf_reader.pages)))
                     else:
                         try:
-                            # Fix applied: Ensure page_input is a string for parsing
                             page_numbers = helpers.parse_page_numbers(page_input, len(pdf_reader.pages))
                         except ValueError:
                             st.error("Invalid page numbers format. Please enter a valid page range or 'all'.")
