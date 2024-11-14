@@ -397,3 +397,13 @@ try:
                 file_name=f"{filename}_reduced.pdf",
                 use_container_width=True,
             )
+
+except Exception as e:
+    st.error(
+        f"""The app has encountered an error:",
+    )
+    st.code(traceback.format_exc())
+
+st.success(
+    "",
+)
