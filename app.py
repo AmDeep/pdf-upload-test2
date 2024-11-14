@@ -400,7 +400,7 @@ try:
 
 except Exception as e:
     st.error(
-        f"""The app has encountered an error:",
+        f"""The app has encountered an error:""",
     )
     st.code(traceback.format_exc())
 
