@@ -28,6 +28,23 @@ st.write(
 st.subheader("Upload Your PDF File")
 uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
+# Function to handle table extraction
+def extract_tables_from_pdf(pdf_reader, page_numbers):
+    # This function should extract tables from the provided pages
+    # Use the helpers.extract_tables function or any other method like Tabula, Camelot, etc.
+    tables = helpers.extract_tables(uploaded_file, page_numbers)
+    return tables
+
+# Function to convert table to CSV (You may need to implement this in helpers.py)
+def convert_table_to_csv(table):
+    # Convert the table (which could be a list of lists or similar structure) to CSV format
+    import io
+    import csv
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(table)
+    return output.getvalue()
+
 try:
     if uploaded_file is not None:
         # Read the uploaded PDF
@@ -41,7 +58,8 @@ try:
 
         # ---------- PDF OPERATIONS ----------
         if pdf_document != "password_required" and pdf_document:
-            # Extract text from PDF
+
+                        # Extract text from PDF
             extracted_text = ""
             for page_num in range(pdf_document.page_count):
                 page = pdf_document.load_page(page_num)
@@ -118,6 +136,37 @@ try:
             st.subheader("Word Frequency (Bag of Words)")
             st.write(vectorized_text)
 
+
+
+            
+            # 1. Table Extraction (Button to extract tables)
+            with st.expander("📊 Extract Tables from PDF"):
+                page_input = st.text_input("Enter page number(s) (e.g., '1', '1-3', 'all')", key="page_input")
+                if st.button("Extract Tables"):
+                    if page_input.lower() == "all":
+                        page_numbers = list(range(len(pdf_reader.pages)))
+                    else:
+                        try:
+                            page_numbers = helpers.parse_page_numbers(page_input, len(pdf_reader.pages))
+                        except ValueError:
+                            st.error("Invalid page numbers format. Please enter a valid page range or 'all'.")
+                            page_numbers = []
+                    if page_numbers:
+                        st.write(f"Extracting tables from pages: {page_numbers}")
+                        tables = extract_tables_from_pdf(pdf_reader, page_numbers)
+                        if tables:
+                            for idx, table in enumerate(tables):
+                                st.write(f"Table {idx + 1}:")
+                                st.write(table)
+                                st.download_button(
+                                    f"📥 Download Table {idx + 1}",
+                                    data=convert_table_to_csv(table),
+                                    file_name=f"table_{idx + 1}.csv",
+                                    mime="text/csv",
+                                )
+                        else:
+                            st.info("No tables found in the specified pages.")
+
             # ---------- PDF Editing Operations ----------
             lcol, rcol = st.columns(2)
 
@@ -144,13 +193,13 @@ try:
                     writer.write("rotated.pdf")
                     st.download_button("📥 Download Rotated PDF", data=open("rotated.pdf", "rb"), file_name="rotated.pdf")
 
-            # 5. Convert PDF to Word
+            # 2. Convert PDF to Word
             with lcol.expander("🔄 Convert to Word"):
                 if st.button("Convert PDF to Word"):
                     word_file = helpers.convert_pdf_to_word(uploaded_file)
                     st.download_button("📥 Download Word Document", data=word_file, file_name="converted.docx")
 
-            # 6. Merge PDFs
+            # 3. Merge PDFs
             with lcol.expander("➕ Merge PDFs"):
                 st.caption("Merge another PDF with the current one.")
                 second_pdf = st.file_uploader("Upload another PDF to merge", type="pdf")
@@ -163,7 +212,7 @@ try:
                         merger.write("merged.pdf")
                         st.download_button("📥 Download Merged PDF", data=open("merged.pdf", "rb"), file_name="merged.pdf")
 
-            # 7. Reduce PDF Size
+            # 4. Reduce PDF Size
             with rcol.expander("🤏 Reduce PDF Size"):
                 if st.button("Reduce PDF Size"):
                     reduced_pdf = helpers.compress_pdf(uploaded_file)
