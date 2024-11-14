@@ -56,45 +56,14 @@ def parse_page_numbers(page_numbers_str):
 
 
 # Function to extract tables and preview pages from PDF
-def extract_tables(file, page_numbers_str):
-    st.caption(
-        "Adjust vertical and horizontal strategies for better extraction. Read details about the strategies [here](https://github.com/jsvine/pdfplumber?tab=readme-ov-file#table-extraction-strategies)."
-    )
-    col0, col1 = st.columns(2)
-    vertical_strategy = col0.selectbox(
-        "Vertical strategy",
-        ["lines", "lines_strict", "text"],
-        index=2,
-    )
-    horizontal_strategy = col1.selectbox(
-        "Horizontal strategy",
-        ["lines", "lines_strict", "text"],
-        index=2,
-    )
+def extract_tables_from_pdf(pdf_reader, page_numbers):
+    # Convert list of page numbers to a comma-separated string
+    page_numbers_str = ",".join(map(str, page_numbers)) if isinstance(page_numbers, list) else page_numbers
+    
+    # Call the helpers.extract_tables function with the correct string format for page numbers
+    tables = helpers.extract_tables(uploaded_file, page_numbers_str)
+    return tables
 
-    header = st.checkbox("Header")
-    first_row_index = 1 if header else 0
-
-    with pdfplumber.open(BytesIO(file) if isinstance(file, bytes) else file) as table_pdf:
-        if page_numbers_str == "all":
-            for page in table_pdf.pages:
-                for table in page.extract_tables(
-                    {"vertical_strategy": vertical_strategy, "horizontal_strategy": horizontal_strategy}
-                ):
-                    st.write(pd.DataFrame(table[first_row_index:], columns=table[0] if header else None))
-
-        else:
-            pages = parse_page_numbers(page_numbers_str)
-            for page in pages:
-                # Show preview of the page
-                page_image = table_pdf.pages[page].to_image()
-                st.image(page_image.to_bytes(), caption=f"Preview of Page {page + 1}", use_column_width=True)
-
-                # Extract tables from the page
-                for table in table_pdf.pages[page].extract_tables(
-                    {"vertical_strategy": vertical_strategy, "horizontal_strategy": horizontal_strategy}
-                ):
-                    st.write(pd.DataFrame(table[first_row_index:], columns=table[0] if header else None))
 
 
 # Function to extract text from PDF
