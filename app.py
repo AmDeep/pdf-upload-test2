@@ -5,13 +5,11 @@ from io import BytesIO
 import streamlit as st
 import fitz  # PyMuPDF
 import re
-from collections import Counter
 import pandas as pd
 import pdfplumber
 from pypdf import PdfReader
 from pypdf.errors import FileNotDecryptedError
 from streamlit import session_state
-from streamlit_pdf_viewer import pdf_viewer
 from utils import helpers, init_session_states, page_config
 
 # Set up the page config
@@ -31,32 +29,66 @@ st.subheader("Upload Your PDF File")
 uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
 # ---------- FIXED parse_page_numbers function -----------
+
 @st.cache_data
 def parse_page_numbers(page_numbers_str):
-    # Ensure the input is a string (in case it's passed as a list)
     if isinstance(page_numbers_str, list):
         page_numbers_str = ",".join(map(str, page_numbers_str))
 
-    # Split the input string by comma or hyphen
     parts = page_numbers_str.split(",")
-
-    # Initialize an empty list to store parsed page numbers
     parsed_page_numbers = []
 
-    # Iterate over each part
     for part in parts:
-        # Remove any leading/trailing spaces
         part = part.strip()
-
-        # If the part contains a hyphen, it represents a range
         if "-" in part:
             start, end = map(int, part.split("-"))
             parsed_page_numbers.extend(range(start, end + 1))
         else:
-            # Otherwise, it's a single page number
             parsed_page_numbers.append(int(part))
 
     return [i - 1 for i in parsed_page_numbers]  # Convert to 0-based indexing
+
+
+# Function to extract tables and preview pages from PDF
+def extract_tables(file, page_numbers_str):
+    st.caption(
+        "Adjust vertical and horizontal strategies for better extraction. Read details about the strategies [here](https://github.com/jsvine/pdfplumber?tab=readme-ov-file#table-extraction-strategies)."
+    )
+    col0, col1 = st.columns(2)
+    vertical_strategy = col0.selectbox(
+        "Vertical strategy",
+        ["lines", "lines_strict", "text"],
+        index=2,
+    )
+    horizontal_strategy = col1.selectbox(
+        "Horizontal strategy",
+        ["lines", "lines_strict", "text"],
+        index=2,
+    )
+
+    header = st.checkbox("Header")
+    first_row_index = 1 if header else 0
+
+    with pdfplumber.open(BytesIO(file) if isinstance(file, bytes) else file) as table_pdf:
+        if page_numbers_str == "all":
+            for page in table_pdf.pages:
+                for table in page.extract_tables(
+                    {"vertical_strategy": vertical_strategy, "horizontal_strategy": horizontal_strategy}
+                ):
+                    st.write(pd.DataFrame(table[first_row_index:], columns=table[0] if header else None))
+
+        else:
+            pages = parse_page_numbers(page_numbers_str)
+            for page in pages:
+                # Show preview of the page
+                page_image = table_pdf.pages[page].to_image()
+                st.image(page_image.to_bytes(), caption=f"Preview of Page {page + 1}", use_column_width=True)
+
+                # Extract tables from the page
+                for table in table_pdf.pages[page].extract_tables(
+                    {"vertical_strategy": vertical_strategy, "horizontal_strategy": horizontal_strategy}
+                ):
+                    st.write(pd.DataFrame(table[first_row_index:], columns=table[0] if header else None))
 
 
 # Function to extract text from PDF
@@ -91,74 +123,14 @@ def extract_images(reader: PdfReader.pages, page_numbers_str: str = "all") -> di
     return images
 
 
-# Function to extract tables from PDF
-def extract_tables(file, page_numbers_str):
-    st.caption(
-        "Adjust vertical and horizontal strategies for better extraction. Read details about the strategies [here](https://github.com/jsvine/pdfplumber?tab=readme-ov-file#table-extraction-strategies)."
-    )
-    col0, col1 = st.columns(2)
-    vertical_strategy = col0.selectbox(
-        "Vertical strategy",
-        ["lines", "lines_strict", "text"],
-        index=2,
-    )
-    horizontal_strategy = col1.selectbox(
-        "Horizontal strategy",
-        ["lines", "lines_strict", "text"],
-        index=2,
-    )
-
-    header = st.checkbox("Header")
-
-    first_row_index = 1 if header else 0
-
-    with pdfplumber.open(
-        BytesIO(file) if isinstance(file, bytes) else file,
-        password=session_state["password"],
-    ) as table_pdf:
-        if page_numbers_str == "all":
-            for page in table_pdf.pages:
-                for table in page.extract_tables(
-                    {
-                        "vertical_strategy": vertical_strategy,
-                        "horizontal_strategy": horizontal_strategy,
-                    }
-                ):
-                    st.write(
-                        pd.DataFrame(
-                            table[first_row_index:],
-                            columns=table[0] if header else None,
-                        )
-                    )
-        else:
-            pages = parse_page_numbers(page_numbers_str)
-            for page in pages:
-                for page in table_pdf.pages[page : page + 1]:
-                    for table in page.extract_tables(
-                        {
-                            "vertical_strategy": vertical_strategy,
-                            "horizontal_strategy": horizontal_strategy,
-                        }
-                    ):
-                        st.write(
-                            pd.DataFrame(
-                                table[first_row_index:],
-                                columns=table[0] if header else None,
-                            )
-                        )
-
-
 # Function to handle table extraction
 def extract_tables_from_pdf(pdf_reader, page_numbers):
-    # This function should extract tables from the provided pages
-    # Use the helpers.extract_tables function or any other method like Tabula, Camelot, etc.
     tables = helpers.extract_tables(uploaded_file, page_numbers)
     return tables
 
 
 # Function to convert table to CSV (You may need to implement this in helpers.py)
 def convert_table_to_csv(table):
-    # Convert the table (which could be a list of lists or similar structure) to CSV format
     import io
     import csv
     output = io.StringIO()
@@ -166,6 +138,8 @@ def convert_table_to_csv(table):
     writer.writerows(table)
     return output.getvalue()
 
+
+# ---------- MAIN SECTION ----------
 
 try:
     if uploaded_file is not None:
@@ -274,7 +248,7 @@ try:
                             page_numbers = []
                     if page_numbers:
                         st.write(f"Extracting tables from pages: {page_numbers}")
-                        extract_tables_from_pdf(pdf_reader, page_numbers)
+                        extract_tables(uploaded_file, page_input)  # Extract tables and show preview
                     else:
                         st.warning("No valid pages selected for table extraction.")
 
