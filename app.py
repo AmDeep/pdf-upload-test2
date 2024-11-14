@@ -33,6 +33,10 @@ uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 # ---------- FIXED parse_page_numbers function -----------
 @st.cache_data
 def parse_page_numbers(page_numbers_str):
+    # Ensure the input is a string (in case it's passed as a list)
+    if isinstance(page_numbers_str, list):
+        page_numbers_str = ",".join(map(str, page_numbers_str))
+
     # Split the input string by comma or hyphen
     parts = page_numbers_str.split(",")
 
@@ -257,13 +261,14 @@ try:
 
             # 1. Table Extraction (Button to extract tables)
             with st.expander("📊 Extract Tables from PDF"):
+                # Handle page number input
                 page_input = st.text_input("Enter page number(s) (e.g., '1', '1-3', 'all')", key="page_input")
                 if st.button("Extract Tables"):
                     if page_input.lower() == "all":
                         page_numbers = list(range(len(pdf_reader.pages)))
                     else:
                         try:
-                            page_numbers = parse_page_numbers(page_input)  # Fix: use the correct function here
+                            page_numbers = parse_page_numbers(page_input)  # Pass page_input (as string) to the parser
                         except ValueError:
                             st.error("Invalid page numbers format. Please enter a valid page range or 'all'.")
                             page_numbers = []
