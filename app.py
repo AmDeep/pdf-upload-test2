@@ -6,14 +6,13 @@ import streamlit as st
 import fitz  # PyMuPDF
 import re
 from collections import Counter
-import pdfplumber
 import pandas as pd
-from pypdf import PdfReader, PdfWriter
+import pdfplumber
+from pypdf import PdfReader
 from pypdf.errors import FileNotDecryptedError
 from streamlit import session_state
 from streamlit_pdf_viewer import pdf_viewer
 from utils import helpers, init_session_states, page_config
-from typing import Literal
 
 # Set up the page config
 page_config.set()
@@ -31,25 +30,7 @@ st.write(
 st.subheader("Upload Your PDF File")
 uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
-# Function to handle table extraction
-def extract_tables_from_pdf(pdf_reader, page_numbers):
-    # This function should extract tables from the provided pages
-    # Use the helpers.extract_tables function or any other method like Tabula, Camelot, etc.
-    tables = helpers.extract_tables(uploaded_file, page_numbers)
-    return tables
-
-# Function to convert table to CSV (You may need to implement this in helpers.py)
-def convert_table_to_csv(table):
-    # Convert the table (which could be a list of lists or similar structure) to CSV format
-    import io
-    import csv
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerows(table)
-    return output.getvalue()
-
-# Updated functions for extracting text, images, and tables
-
+# ---------- FIXED parse_page_numbers function -----------
 @st.cache_data
 def parse_page_numbers(page_numbers_str):
     # Split the input string by comma or hyphen
@@ -71,14 +52,11 @@ def parse_page_numbers(page_numbers_str):
             # Otherwise, it's a single page number
             parsed_page_numbers.append(int(part))
 
-    return [i - 1 for i in parsed_page_numbers]
+    return [i - 1 for i in parsed_page_numbers]  # Convert to 0-based indexing
 
 
-def extract_text(
-    reader: PdfReader.pages,
-    page_numbers_str: str = "all",
-    mode: Literal["plain", "layout"] = "plain",
-) -> str:
+# Function to extract text from PDF
+def extract_text(reader: PdfReader.pages, page_numbers_str: str = "all", mode: str = "plain") -> str:
     text = ""
 
     if page_numbers_str == "all":
@@ -92,7 +70,8 @@ def extract_text(
     return text
 
 
-def extract_images(reader: PdfReader.pages, page_numbers_str: str = "all") -> str:
+# Function to extract images from PDF
+def extract_images(reader: PdfReader.pages, page_numbers_str: str = "all") -> dict:
     images = {}
     if page_numbers_str == "all":
         for page in reader.pages:
@@ -108,6 +87,7 @@ def extract_images(reader: PdfReader.pages, page_numbers_str: str = "all") -> st
     return images
 
 
+# Function to extract tables from PDF
 def extract_tables(file, page_numbers_str):
     st.caption(
         "Adjust vertical and horizontal strategies for better extraction. Read details about the strategies [here](https://github.com/jsvine/pdfplumber?tab=readme-ov-file#table-extraction-strategies)."
@@ -162,6 +142,25 @@ def extract_tables(file, page_numbers_str):
                                 columns=table[0] if header else None,
                             )
                         )
+
+
+# Function to handle table extraction
+def extract_tables_from_pdf(pdf_reader, page_numbers):
+    # This function should extract tables from the provided pages
+    # Use the helpers.extract_tables function or any other method like Tabula, Camelot, etc.
+    tables = helpers.extract_tables(uploaded_file, page_numbers)
+    return tables
+
+
+# Function to convert table to CSV (You may need to implement this in helpers.py)
+def convert_table_to_csv(table):
+    # Convert the table (which could be a list of lists or similar structure) to CSV format
+    import io
+    import csv
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(table)
+    return output.getvalue()
 
 
 try:
@@ -255,24 +254,8 @@ try:
             ##st.subheader("Word Frequency (Bag of Words)")
             ##st.write(vectorized_text)
 
-            # ---------- IMAGE EXTRACTION ----------
-            with st.expander("️🖼️ Extract Images"):
-                if page_numbers_str := helpers.select_pages(
-                    container=st,
-                    key="extract_image_pages",
-                ):
-                    try:
-                        images = extract_images(pdf_reader, page_numbers_str)
-                    except (IndexError, ValueError):
-                        st.error("Specified pages don't exist. Check the format.", icon="⚠️")
-                    else:
-                        if images:
-                            for data, name in images.items():
-                                st.image(data, caption=name)
-                        else:
-                            st.info("No images found")
 
-            # ---------- TABLE EXTRACTION ----------
+            # 1. Table Extraction (Button to extract tables)
             with st.expander("📊 Extract Tables from PDF"):
                 page_input = st.text_input("Enter page number(s) (e.g., '1', '1-3', 'all')", key="page_input")
                 if st.button("Extract Tables"):
@@ -280,82 +263,19 @@ try:
                         page_numbers = list(range(len(pdf_reader.pages)))
                     else:
                         try:
-                            page_numbers = helpers.parse_page_numbers(page_input, len(pdf_reader.pages))
+                            page_numbers = parse_page_numbers(page_input)  # Fix: use the correct function here
                         except ValueError:
                             st.error("Invalid page numbers format. Please enter a valid page range or 'all'.")
                             page_numbers = []
                     if page_numbers:
                         st.write(f"Extracting tables from pages: {page_numbers}")
-                        tables = extract_tables_from_pdf(pdf_reader, page_numbers)
-                        if tables:
-                            for idx, table in enumerate(tables):
-                                st.write(f"Table {idx + 1}:")
-                                st.write(table)
-                                st.download_button(
-                                    f"📥 Download Table {idx + 1}",
-                                    data=convert_table_to_csv(table),
-                                    file_name=f"table_{idx + 1}.csv",
-                                    mime="text/csv",
-                                )
-                        else:
-                            st.info("No tables found in the specified pages.")
+                        extract_tables_from_pdf(pdf_reader, page_numbers)
+                    else:
+                        st.warning("No valid pages selected for table extraction.")
 
-            # ---------- PDF Editing Operations ----------
-            lcol, rcol = st.columns(2)
-
-            with lcol.expander("🔒 PDF Encryption & Decryption"):
-                # Password-protect or remove password from PDF
-                new_password = st.text_input("Enter new password (Leave blank to remove password)", type="password")
-                if new_password:
-                    with PdfWriter() as writer:
-                        for page in pdf_reader.pages:
-                            writer.add_page(page)
-                        writer.encrypt(new_password)
-                        filename = "protected_pdf.pdf"
-                        with open(filename, "wb") as f:
-                            writer.write(f)
-                        st.download_button("📥 Download Protected PDF", data=open(filename, "rb"), file_name=filename)
-
-            with rcol.expander("🔄 PDF Operations"):
-                # Rotate PDF
-                angle = st.slider("Rotate PDF (degrees)", min_value=0, max_value=270, step=90, format="%d°")
-                with PdfWriter() as writer:
-                    for page in pdf_reader.pages:
-                        writer.add_page(page)
-                        writer.pages[-1].rotate(angle)
-                    writer.write("rotated.pdf")
-                    st.download_button("📥 Download Rotated PDF", data=open("rotated.pdf", "rb"), file_name="rotated.pdf")
-
-            # 2. Convert PDF to Word
-            with lcol.expander("🔄 Convert to Word"):
-                if st.button("Convert PDF to Word"):
-                    word_file = helpers.convert_pdf_to_word(uploaded_file)
-                    st.download_button("📥 Download Word Document", data=word_file, file_name="converted.docx")
-
-            # 3. Merge PDFs
-            with lcol.expander("➕ Merge PDFs"):
-                st.caption("Merge another PDF with the current one.")
-                second_pdf = st.file_uploader("Upload another PDF to merge", type="pdf")
-                if second_pdf:
-                    with PdfWriter() as merger:
-                        for file in [uploaded_file, second_pdf]:
-                            reader_to_merge = PdfReader(file)
-                            for page in reader_to_merge.pages:
-                                merger.add_page(page)
-                        merger.write("merged.pdf")
-                        st.download_button("📥 Download Merged PDF", data=open("merged.pdf", "rb"), file_name="merged.pdf")
-
-            # 4. Reduce PDF Size
-            with rcol.expander("🤏 Reduce PDF Size"):
-                if st.button("Reduce PDF Size"):
-                    reduced_pdf = helpers.compress_pdf(uploaded_file)
-                    st.download_button("📥 Download Reduced PDF", data=reduced_pdf, file_name="reduced.pdf")
         else:
-            st.error("PDF could not be processed.")
-
-    else:
-        st.info("Please upload a PDF file to get started.")
+            st.error("Unable to process the PDF. It may be password protected.")
 
 except Exception as e:
-    st.error(f"An error occurred: {str(e)}")
-    st.code(traceback.format_exc())
+    st.error(f"An error occurred: {e}")
+    st.write(traceback.format_exc())
