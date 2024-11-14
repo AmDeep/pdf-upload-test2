@@ -6,7 +6,7 @@ import streamlit as st
 import fitz  # PyMuPDF
 import re
 from collections import Counter
-from pypdf import PaperSize, PdfReader, PdfWriter, Transformation
+from pypdf import PdfReader, PdfWriter
 from pypdf.errors import FileNotDecryptedError
 from streamlit import session_state
 from streamlit_pdf_viewer import pdf_viewer
@@ -59,7 +59,7 @@ try:
         # ---------- PDF OPERATIONS ----------
         if pdf_document != "password_required" and pdf_document:
 
-                        # Extract text from PDF
+            # Extract text from PDF
             extracted_text = ""
             for page_num in range(pdf_document.page_count):
                 page = pdf_document.load_page(page_num)
@@ -136,10 +136,24 @@ try:
             ##st.subheader("Word Frequency (Bag of Words)")
             ##st.write(vectorized_text)
 
+            # ---------- IMAGE EXTRACTION ----------
+            with st.expander("️🖼️ Extract Images"):
+                if page_numbers_str := helpers.select_pages(
+                    container=st,
+                    key="extract_image_pages",
+                ):
+                    try:
+                        images = helpers.extract_images(pdf_reader, page_numbers_str)
+                    except (IndexError, ValueError):
+                        st.error("Specified pages don't exist. Check the format.", icon="⚠️")
+                    else:
+                        if images:
+                            for data, name in images.items():
+                                st.image(data, caption=name)
+                        else:
+                            st.info("No images found")
 
-
-            
-            # 1. Table Extraction (Button to extract tables)
+            # ---------- TABLE EXTRACTION ----------
             with st.expander("📊 Extract Tables from PDF"):
                 page_input = st.text_input("Enter page number(s) (e.g., '1', '1-3', 'all')", key="page_input")
                 if st.button("Extract Tables"):
