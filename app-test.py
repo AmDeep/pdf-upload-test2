@@ -128,39 +128,31 @@ try:
                 st.write("No tables containing predefined terms found.")
 
             # 2. Contextual Mentions (minimized and scrollable by default)
-            st.subheader(f"Contextual Mentions of Terms")
-            context_data = extract_matching_info(cleaned_text, terms_list)
+            custom_term = st.text_input("Enter a term to analyze (e.g., 'eligibility')", "eligibility")
+            st.subheader(f"Contextual Mentions of '{custom_term.capitalize()}'")
+            
+            context_data = extract_matching_info(cleaned_text, [custom_term.lower()])
             
             # Show context in a scrollable, minimized area
-            with st.expander("See Contextual Mentions"):
+            with st.expander(f"See Contextual Mentions for '{custom_term.capitalize()}'"):
                 if context_data:
                     for entry in context_data:
                         st.write(f"- **{entry[0]}**: {entry[1]}")
                 else:
-                    st.write("No contextual mentions found for the predefined terms.")
+                    st.write(f"No contextual mentions found for '{custom_term}'.")
 
             # 3. Full Lines Containing the Term
-            def print_full_lines_with_term(text, terms_list):
+            def print_full_lines_with_term(text, term):
                 full_lines = []
                 lines = text.split("\n")
                 for line in lines:
-                    if any(term in line.lower() for term in terms_list):
+                    if term in line.lower():
                         full_lines.append(line)
                 return "\n".join(full_lines)
 
-            full_lines = print_full_lines_with_term(extracted_text, terms_list)
-            st.subheader(f"Full Lines Containing the Predefined Terms")
+            full_lines = print_full_lines_with_term(extracted_text, custom_term.lower())
+            st.subheader(f"Full Lines Containing '{custom_term.capitalize()}'")
             st.text_area("Full Lines", full_lines, height=150)
-
-            # 4. Extracting tables with detailed term-matching
-            st.subheader("Full Table of Predefined Terms Extracted from Document")
-            if matching_tables:
-                matched_data = match_term_to_table(matching_tables, terms_list, page_numbers)
-                if matched_data:
-                    matched_df = pd.DataFrame(matched_data, columns=["Term", "Description", "Page Number"])
-                    st.write(matched_df)
-                else:
-                    st.write("No matching tables found.")
 
         else:
             st.error("Unable to process the PDF. It may be password protected.")
