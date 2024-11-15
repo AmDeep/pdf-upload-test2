@@ -64,7 +64,6 @@ def extract_tables_from_pdf(pdf_reader, page_numbers):
     return tables
 
 
-
 # Function to extract text from PDF
 def extract_text(reader: PdfReader.pages, page_numbers_str: str = "all", mode: str = "plain") -> str:
     text = ""
@@ -254,10 +253,7 @@ try:
                             page_numbers = []
                     if page_numbers:
                         st.write(f"Extracting tables from pages: {page_numbers}")
-                        tables = extract_tables_from_pdf(pdf_reader, page_numbers)
-                        st.write("Tables Extracted:")
-                        for table in tables:
-                            st.write(table)
+                        extract_tables_from_pdf(pdf_reader, page_numbers)
                     else:
                         st.warning("No valid pages selected for table extraction.")
 
