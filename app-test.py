@@ -117,11 +117,12 @@ try:
             page_numbers = list(range(len(pdf_reader.pages)))  # Extract from all pages
             matching_tables = extract_tables_from_pdf(pdf_reader, terms_list)
 
+            # Display the table data
             if matching_tables:
                 matched_data = match_term_to_table(matching_tables, terms_list, page_numbers)
                 if matched_data:
                     matched_df = pd.DataFrame(matched_data, columns=["Term", "Description", "Page Number"])
-                    st.write(matched_df)
+                    st.write(matched_df)  # Display the single table with predefined terms
                 else:
                     st.write("No relevant data found for the predefined terms in the tables.")
             else:
