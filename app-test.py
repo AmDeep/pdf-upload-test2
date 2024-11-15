@@ -37,31 +37,20 @@ def extract_text(reader: PdfReader.pages, mode: str = "plain") -> str:
     return text
 
 # Function to extract tables from PDF
-def extract_tables_from_pdf(pdf_reader, term):
+def extract_tables_from_pdf(pdf_reader, terms_list):
     tables = helpers.extract_tables(uploaded_file, "all")
     
     matching_tables = []
     for table in tables:
         for row in table:
-            if any(term.lower() in cell.lower() for cell in row):  # Check if term is in any cell of the row
+            if any(term.lower() in cell.lower() for term in terms_list for cell in row):  # Check if any term is in the row
                 matching_tables.append(table)
                 break
 
     return matching_tables
 
-# Function to extract and display matching data based on term
-def extract_matching_info(text, term):
-    # Define the list of terms for internal form extraction
-    terms_list = [
-        "company", "plan name", "Ftwilliam ID", "Total aum", "Mscs account", "Safe Harbor", 
-        "Vesting", "profit sharing vesting", "plan type", "compensation definition", 
-        "deferral change frequency", "match frequency", "entry date", "match entry date", 
-        "profit share entry date", "minimum age", "match minimum age", "profit share minimum age", 
-        "eligibility delay", "match eligibility delay", "profit share eligibility delay", 
-        "eligibility delay rolling", "hours of service", "plan effective date", 
-        "plan restatement date", "plan number"
-    ]
-
+# Function to extract and display matching data based on predefined terms
+def extract_matching_info(text, terms_list):
     matching_info = []
     sentences = text.split(".")
     for sentence in sentences:
@@ -72,14 +61,15 @@ def extract_matching_info(text, term):
     return matching_info
 
 # Function to match term with extracted data
-def match_term_to_table(text, tables, term):
-    matching_data = []
+def match_term_to_table(text, tables, terms_list):
+    matched_data = []
     for table in tables:
         for row in table:
             for cell in row:
-                if term.lower() in cell.lower():
-                    matching_data.append((term, cell, "Page X"))  # Page number will be added later
-    return matching_data
+                for term in terms_list:
+                    if term.lower() in cell.lower():
+                        matched_data.append((term, cell, "Page X"))  # Page number will be added later
+    return matched_data
 
 # ---------- MAIN SECTION ----------
 try:
@@ -111,73 +101,47 @@ try:
 
             cleaned_text = clean_text(extracted_text)
 
-            # Input for custom term to search for
-            custom_term = st.text_input("Enter a term to analyze (e.g., 'eligibility')", "eligibility")
+            # Predefined terms to look for in the document
+            terms_list = [
+                "company", "plan name", "Ftwilliam ID", "Total aum", "Mscs account", "Safe Harbor", 
+                "Vesting", "profit sharing vesting", "plan type", "compensation definition", 
+                "deferral change frequency", "match frequency", "entry date", "match entry date", 
+                "profit share entry date", "minimum age", "match minimum age", "profit share minimum age", 
+                "eligibility delay", "match eligibility delay", "profit share eligibility delay", 
+                "eligibility delay rolling", "hours of service", "plan effective date", 
+                "plan restatement date", "plan number"
+            ]
 
-            # 1. Contextual Relationship Extraction
-            def extract_contextual_relationships(text, term):
-                term = term.lower()
-                sentences = text.split('.')
-                context_data = []
-                for sentence in sentences:
-                    if term in sentence.lower():
-                        context_data.append(sentence.strip())
-                return context_data
-
-            context_data = extract_contextual_relationships(cleaned_text, custom_term)
-            st.subheader(f"Contextual Mentions of '{custom_term.capitalize()}'")
-            if context_data:
-                for entry in context_data:
-                    st.write(f"- {entry}")
-            else:
-                st.write(f"No mentions of '{custom_term}' found in the document.")
-
-            # 2. Summarize Mentions
-            def summarize_mentions(text, term):
-                term = term.lower()
-                sentences = text.split('.')
-                summary = []
-                for sentence in sentences:
-                    if term in sentence.lower():
-                        summary.append(sentence.strip())
-                return "\n".join(summary) if summary else f"No mentions of '{term}' found."
-
-            summary = summarize_mentions(cleaned_text, custom_term)
-            st.subheader(f"Summary of Mentions for '{custom_term.capitalize()}'")
-            st.text_area("Summary", summary, height=150)
-
-            # 3. Full Lines Containing the Term
-            def print_full_lines_with_term(text, term):
-                term = term.lower()
-                full_lines = []
-                lines = text.split("\n")
-                for line in lines:
-                    if term in line.lower():
-                        full_lines.append(line)
-                return "\n".join(full_lines)
-
-            full_lines = print_full_lines_with_term(extracted_text, custom_term)
-            st.subheader(f"Full Lines Containing '{custom_term.capitalize()}'")
-            st.text_area("Full Lines", full_lines, height=150)
-
-            # 4. Extracting Tables based on Term
-            st.subheader(f"Extract Tables Matching '{custom_term.capitalize()}'")
-            matching_tables = extract_tables_from_pdf(pdf_reader, custom_term)
+            # 1. Extracting tables based on predefined terms (without user input)
+            st.subheader("Extract Table Matching Predefined Terms")
+            matching_tables = extract_tables_from_pdf(pdf_reader, terms_list)
             
+            matched_data = []
             if matching_tables:
-                # Match term with table data and display
-                matched_data = []
+                # Extract matching data from tables
                 for table in matching_tables:
-                    matched_data.extend(match_term_to_table(extracted_text, [table], custom_term))
+                    matched_data.extend(match_term_to_table(extracted_text, [table], terms_list))
                 
+                # Create a DataFrame for output
                 if matched_data:
-                    # Create a DataFrame for display
-                    df = pd.DataFrame(matched_data, columns=["Term", "Description", "Page Number"])
-                    st.write(df)
+                    matched_df = pd.DataFrame(matched_data, columns=["Term", "Description", "Page Number"])
+                    st.write(matched_df)
                 else:
-                    st.write(f"No matching data found for '{custom_term}'.")
+                    st.write("No relevant data found for the predefined terms in the tables.")
             else:
-                st.write(f"No tables containing '{custom_term}' found.")
+                st.write("No tables containing predefined terms found.")
+
+            # 2. Contextual Mentions (minimized and scrollable by default)
+            st.subheader(f"Contextual Mentions of Terms")
+            context_data = extract_matching_info(cleaned_text, terms_list)
+            
+            # Show context in a scrollable, minimized area
+            with st.expander("See Contextual Mentions"):
+                if context_data:
+                    for entry in context_data:
+                        st.write(f"- **{entry[0]}**: {entry[1]}")
+                else:
+                    st.write("No contextual mentions found for the predefined terms.")
 
         else:
             st.error("Unable to process the PDF. It may be password protected.")
