@@ -36,7 +36,7 @@ def extract_text(reader: PdfReader.pages, mode: str = "plain") -> str:
         text += page.extract_text(extraction_mode=mode)
     return text
 
-# Function to extract tables from PDF
+# Function to extract tables from PDF based on predefined terms
 def extract_tables_from_pdf(pdf_reader, terms_list):
     tables = helpers.extract_tables(uploaded_file, "all")
     
@@ -60,15 +60,15 @@ def extract_matching_info(text, terms_list):
                 
     return matching_info
 
-# Function to match term with extracted data
-def match_term_to_table(text, tables, terms_list):
+# Function to match term with extracted data from tables
+def match_term_to_table(tables, terms_list, page_numbers):
     matched_data = []
-    for table in tables:
+    for page_num, table in zip(page_numbers, tables):
         for row in table:
             for cell in row:
                 for term in terms_list:
                     if term.lower() in cell.lower():
-                        matched_data.append((term, cell, "Page X"))  # Page number will be added later
+                        matched_data.append((term, cell, page_num))  # Include page number for reference
     return matched_data
 
 # ---------- MAIN SECTION ----------
@@ -112,17 +112,13 @@ try:
                 "plan restatement date", "plan number"
             ]
 
-            # 1. Extracting tables based on predefined terms (without user input)
+            # 1. Extracting tables based on predefined terms (no user input term)
             st.subheader("Extract Table Matching Predefined Terms")
+            page_numbers = list(range(len(pdf_reader.pages)))  # Extract from all pages
             matching_tables = extract_tables_from_pdf(pdf_reader, terms_list)
-            
-            matched_data = []
+
             if matching_tables:
-                # Extract matching data from tables
-                for table in matching_tables:
-                    matched_data.extend(match_term_to_table(extracted_text, [table], terms_list))
-                
-                # Create a DataFrame for output
+                matched_data = match_term_to_table(matching_tables, terms_list, page_numbers)
                 if matched_data:
                     matched_df = pd.DataFrame(matched_data, columns=["Term", "Description", "Page Number"])
                     st.write(matched_df)
@@ -142,6 +138,29 @@ try:
                         st.write(f"- **{entry[0]}**: {entry[1]}")
                 else:
                     st.write("No contextual mentions found for the predefined terms.")
+
+            # 3. Full Lines Containing the Term
+            def print_full_lines_with_term(text, terms_list):
+                full_lines = []
+                lines = text.split("\n")
+                for line in lines:
+                    if any(term in line.lower() for term in terms_list):
+                        full_lines.append(line)
+                return "\n".join(full_lines)
+
+            full_lines = print_full_lines_with_term(extracted_text, terms_list)
+            st.subheader(f"Full Lines Containing the Predefined Terms")
+            st.text_area("Full Lines", full_lines, height=150)
+
+            # 4. Extracting tables with detailed term-matching
+            st.subheader("Full Table of Predefined Terms Extracted from Document")
+            if matching_tables:
+                matched_data = match_term_to_table(matching_tables, terms_list, page_numbers)
+                if matched_data:
+                    matched_df = pd.DataFrame(matched_data, columns=["Term", "Description", "Page Number"])
+                    st.write(matched_df)
+                else:
+                    st.write("No matching tables found.")
 
         else:
             st.error("Unable to process the PDF. It may be password protected.")
