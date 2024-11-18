@@ -91,16 +91,17 @@ def match_terms_in_text(text):
     
     return matches
 
-# Function to extract tables and relevant information
-def extract_information_from_pdf(pdf_reader):
+# Function to dynamically extract relevant information from the PDF based on specified terms
+def extract_relevant_information(pdf_reader, terms):
     info_data = []
     
     for page_num, page in enumerate(pdf_reader.pages):
         text = page.extract_text()
-        matches = match_terms_in_text(text)
-        
-        for match in matches:
-            info_data.append([match, text, page_num + 1])
+        for term in terms:
+            pattern = rf"({term}.*?)(?=\n|$)"
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                info_data.append([term, match, page_num + 1])
     
     return info_data
 
@@ -206,31 +207,19 @@ try:
             ##st.subheader("Word Frequency (Bag of Words)")
             ##st.write(vectorized_text)
 
-
-            # 1. Table Extraction (Button to extract tables)
-            with st.expander("📊 Extract Tables from PDF"):
-                # Handle page number input
-                page_input = st.text_input("Enter page number(s) (e.g., '1', '1-3', 'all')", key="page_input")
-                if st.button("Extract Tables"):
-                    if page_input.lower() == "all":
-                        page_numbers = list(range(len(pdf_reader.pages)))
-                    else:
-                        try:
-                            page_numbers = parse_page_numbers(page_input)  # Pass page_input (as string) to the parser
-                        except ValueError:
-                            st.error("Invalid page numbers format. Please enter a valid page range or 'all'.")
-                            page_numbers = []
-                    if page_numbers:
-                        st.write(f"Extracting tables from pages: {page_numbers}")
-                        extract_tables_from_pdf(pdf_reader, page_numbers)
-                    else:
-                        st.warning("No valid pages selected for table extraction.")
+            # Define the terms to extract
+            terms_to_extract = [
+                "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE", "Safe harbor", 
+                "Vesting", "Profit Sharing vesting", "Plan Type", "Compensation Definition", "Defferal change frequency",
+                "Match frequency", "Entry date", "Match Entry date", "Profit share entry date", "Minimum age", 
+                "Match Minimum age", "Profit Share Minimum Age", "Eligibility delay"
+            ]
 
             # Extract information matching specific terms
-            info_data = extract_information_from_pdf(pdf_reader)
+            info_data = extract_relevant_information(pdf_reader, terms_to_extract)
             st.subheader("Extracted Information")
             if info_data:
-                info_df = pd.DataFrame(info_data, columns=["Term", "Full Text", "Page Number"])
+                info_df = pd.DataFrame(info_data, columns=["Term", "Response", "Page Number"])
                 st.dataframe(info_df)
             else:
                 st.write("No relevant information found in the document.")
