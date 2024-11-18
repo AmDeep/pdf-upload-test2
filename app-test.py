@@ -78,10 +78,11 @@ def pdf_to_markdown(pdf_document):
 # Matching function for table extraction
 def match_terms_in_text(text):
     terms = [
-                "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE", "Safe harbor", 
-                "Vesting", "Profit Sharing vesting", "Plan Type", "Compensation Definition", "Defferal change frequency",
-                "Match frequency", "Entry date", "Match Entry date", "Profit share entry date", "Minimum age", 
-                "Match Minimum age", "Profit Share Minimum Age", "Eligibility delay"
+        "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE",
+        "Safe harbor", "Vesting", "Profit Sharing vesting", "Plan Type",
+        "Compensation Definition", "Defferal change frequency", "Match frequency",
+        "Entry date", "Match Entry date", "Profit share entry date", "Minimum age",
+        "Match Minimum age", "Profit Share Minimum Age", "Eligibility delay"
     ]
     
     matches = []
@@ -208,9 +209,10 @@ try:
 
             # Define the terms to extract
             terms_to_extract = [
-                "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE", "Safe harbor", 
-                "Vesting", "Profit Sharing vesting", "Plan Type", "Compensation Definition", "Defferal change frequency",
-                "Match frequency", "Entry date", "Match Entry date", "Profit share entry date", "Minimum age", 
+                "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE",
+                "Safe harbor", "Vesting", "Profit Sharing vesting", "Plan Type",
+                "Compensation Definition", "Defferal change frequency", "Match frequency",
+                "Entry date", "Match Entry date", "Profit share entry date", "Minimum age",
                 "Match Minimum age", "Profit Share Minimum Age", "Eligibility delay"
             ]
 
