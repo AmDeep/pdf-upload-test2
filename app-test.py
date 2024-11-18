@@ -78,11 +78,10 @@ def pdf_to_markdown(pdf_document):
 # Matching function for table extraction
 def match_terms_in_text(text):
     terms = [
-        "company", "plan name", "Ftwilliam Id", "Total aum", "Mscs account", "Safe Habor", "Vesting", "profit sharing vesting", 
-        "plan type", "compensation definition", "deferral change frequency", "match frequency", "entry date", "match entry date", 
-        "profit share entry date", "minimum age", "match minimum age", "profit share minimum age", "eligibility delay", 
-        "match eligibility delay", "profit share eligibility delay", "eligibility delay rolling", "hours of service", 
-        "plan effective date", "plan restatement date", "plan number", "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE"
+                "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE", "Safe harbor", 
+                "Vesting", "Profit Sharing vesting", "Plan Type", "Compensation Definition", "Defferal change frequency",
+                "Match frequency", "Entry date", "Match Entry date", "Profit share entry date", "Minimum age", 
+                "Match Minimum age", "Profit Share Minimum Age", "Eligibility delay"
     ]
     
     matches = []
