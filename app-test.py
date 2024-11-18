@@ -75,35 +75,20 @@ def pdf_to_markdown(pdf_document):
         markdown_text += page.get_text("markdown")
     return markdown_text
 
-# Matching function for table extraction
-def match_terms_in_text(text):
-    terms = [
-        "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE",
-        "Safe harbor", "Vesting", "Profit Sharing vesting", "Plan Type",
-        "Compensation Definition", "Defferal change frequency", "Match frequency",
-        "Entry date", "Match Entry date", "Profit share entry date", "Minimum age",
-        "Match Minimum age", "Profit Share Minimum Age", "Eligibility delay"
-    ]
-    
-    matches = []
-    for term in terms:
-        matches.extend(re.findall(f'({term}.*?)(?=\n|$)', text, re.IGNORECASE))
-    
-    return matches
-
 # Function to dynamically extract relevant information from the PDF based on specified terms
 def extract_relevant_information(pdf_reader, terms):
-    info_data = []
+    info_data = {term: None for term in terms}  # Initialize dictionary to store the first occurrence of each term
     
     for page_num, page in enumerate(pdf_reader.pages):
         text = page.extract_text()
         for term in terms:
-            pattern = rf"({term}.*?)(?=\n|$)"
-            matches = re.findall(pattern, text, re.IGNORECASE)
-            for match in matches:
-                info_data.append([term, match, page_num + 1])
+            if info_data[term] is None:  # Check if term has already been found
+                pattern = rf"({term}.*?)(?=\n|$)"
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    info_data[term] = [term, match.group(1), page_num + 1]
     
-    return info_data
+    return [info_data[term] for term in terms if info_data[term] is not None]
 
 # Function to handle table extraction
 def extract_tables_from_pdf(pdf_reader, page_numbers):
