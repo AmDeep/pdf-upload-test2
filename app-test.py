@@ -53,17 +53,6 @@ def parse_page_numbers(page_numbers_str):
 
     return [i - 1 for i in parsed_page_numbers]
 
-
-# Function to extract tables and preview pages from PDF
-def extract_tables_from_pdf(pdf_reader, page_numbers):
-    # Convert list of page numbers to a comma-separated string
-    page_numbers_str = ",".join(map(str, page_numbers)) if isinstance(page_numbers, list) else page_numbers
-    
-    # Call the helpers.extract_tables function with the correct string format for page numbers
-    tables = helpers.extract_tables(uploaded_file, page_numbers_str)
-    return tables
-
-
 # Function to extract text from PDF
 def extract_text(reader: PdfReader.pages, page_numbers_str: str = "all", mode: str = "plain") -> str:
     text = ""
@@ -78,39 +67,13 @@ def extract_text(reader: PdfReader.pages, page_numbers_str: str = "all", mode: s
 
     return text
 
-
-# Function to extract images from PDF
-def extract_images(reader: PdfReader.pages, page_numbers_str: str = "all") -> dict:
-    images = {}
-    if page_numbers_str == "all":
-        for page in reader.pages:
-            images |= {image.data: image.name for image in page.images}
-
-    else:
-        pages = parse_page_numbers(page_numbers_str)
-        for page in pages:
-            images.update(
-                {image.data: image.name for image in reader.pages[page].images}
-            )
-
-    return images
-
-
-# Function to handle table extraction
-def extract_tables_from_pdf(pdf_reader, page_numbers):
-    tables = helpers.extract_tables(uploaded_file, page_numbers)
-    return tables
-
-
-# Function to convert table to CSV (You may need to implement this in helpers.py)
-def convert_table_to_csv(table):
-    import io
-    import csv
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerows(table)
-    return output.getvalue()
-
+# Function to convert PDF to Markdown
+def pdf_to_markdown(pdf_document):
+    markdown_text = ""
+    for page_num in range(pdf_document.page_count):
+        page = pdf_document.load_page(page_num)
+        markdown_text += page.get_text("markdown")
+    return markdown_text
 
 # Matching function for table extraction
 def match_terms_in_text(text):
@@ -119,7 +82,7 @@ def match_terms_in_text(text):
         "plan type", "compensation definition", "deferral change frequency", "match frequency", "entry date", "match entry date", 
         "profit share entry date", "minimum age", "match minimum age", "profit share minimum age", "eligibility delay", 
         "match eligibility delay", "profit share eligibility delay", "eligibility delay rolling", "hours of service", 
-        "plan effective date", "plan restatement date", "plan number"
+        "plan effective date", "plan restatement date", "plan number", "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE"
     ]
     
     matches = []
@@ -127,7 +90,6 @@ def match_terms_in_text(text):
         matches.extend(re.findall(f'({term}.*?)(?=\n|$)', text, re.IGNORECASE))
     
     return matches
-
 
 # Function to extract tables and relevant information
 def extract_information_from_pdf(pdf_reader):
@@ -142,6 +104,10 @@ def extract_information_from_pdf(pdf_reader):
     
     return info_data
 
+# Function to handle table extraction
+def extract_tables_from_pdf(pdf_reader, page_numbers):
+    tables = helpers.extract_tables(uploaded_file, page_numbers)
+    return tables
 
 # ---------- MAIN SECTION ----------
 
@@ -164,6 +130,9 @@ try:
             for page_num in range(pdf_document.page_count):
                 page = pdf_document.load_page(page_num)
                 extracted_text += page.get_text("text")  # Basic text extraction
+
+            # Convert PDF to Markdown
+            markdown_text = pdf_to_markdown(pdf_document)
 
             # Clean the extracted text
             def clean_text(text):
