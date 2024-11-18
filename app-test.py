@@ -29,79 +29,45 @@ st.subheader("Upload Your PDF File")
 uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
 # ---------- FIXED parse_page_numbers function -----------
+
 @st.cache_data
 def parse_page_numbers(page_numbers_str):
+    # Split the input string by comma or hyphen
     parts = page_numbers_str.split(",")
+
+    # Initialize an empty list to store parsed page numbers
     parsed_page_numbers = []
+
+    # Iterate over each part
     for part in parts:
+        # Remove any leading/trailing spaces
         part = part.strip()
+
+        # If the part contains a hyphen, it represents a range
         if "-" in part:
             start, end = map(int, part.split("-"))
             parsed_page_numbers.extend(range(start, end + 1))
         else:
+            # Otherwise, it's a single page number
             parsed_page_numbers.append(int(part))
+
     return [i - 1 for i in parsed_page_numbers]
 
-# Function to extract and convert PDF to Markdown format
-def convert_pdf_to_markdown(pdf_document):
-    markdown_text = ""
-    for page_num in range(pdf_document.page_count):
-        page = pdf_document.load_page(page_num)
-        blocks = page.get_text("dict")["blocks"]
-        for block in blocks:
-            if block["type"] == 0:  # Text block
-                for line in block["lines"]:
-                    line_text = " ".join([span["text"] for span in line["spans"]])
-                    # Check for bold, underline, or italic formatting
-                    is_bold = any(span["flags"] == 2 for span in line["spans"])
-                    is_underline = any(span["flags"] == 4 for span in line["spans"])
-                    is_italic = any(span["flags"] == 1 for span in line["spans"])
-                    
-                    # Add Markdown formatting if needed
-                    if is_bold:
-                        line_text = f"**{line_text}**"
-                    if is_underline:
-                        line_text = f"_{line_text}_"
-                    if is_italic:
-                        line_text = f"*{line_text}*"
-                    
-                    markdown_text += f"{line_text}\n"
-    return markdown_text
-
-# Function to match specific terms in the text
-def match_terms_in_text(text):
-    terms = [
-        "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE",
-        "company", "plan name", "Ftwilliam Id", "Total aum", "Mscs account", "Safe Habor", "Vesting", "profit sharing vesting", 
-        "plan type", "compensation definition", "deferral change frequency", "match frequency", "entry date", "match entry date", 
-        "profit share entry date", "minimum age", "match minimum age", "profit share minimum age", "eligibility delay", 
-        "match eligibility delay", "profit share eligibility delay", "eligibility delay rolling", "hours of service", 
-        "plan effective date", "plan restatement date", "plan number"
-    ]
-    
-    matches = []
-    for term in terms:
-        matches.extend(re.findall(f'({term}.*?)(?=\n|$)', text, re.IGNORECASE))
-    
-    return matches
-
-# Function to extract information for required terms
-def extract_information_from_markdown(markdown_text, page_number):
-    matches = match_terms_in_text(markdown_text)
-    info_data = []
-    for match in matches:
-        info_data.append([match, markdown_text, page_number])
-    return info_data
 
 # Function to extract tables and preview pages from PDF
 def extract_tables_from_pdf(pdf_reader, page_numbers):
+    # Convert list of page numbers to a comma-separated string
     page_numbers_str = ",".join(map(str, page_numbers)) if isinstance(page_numbers, list) else page_numbers
+    
+    # Call the helpers.extract_tables function with the correct string format for page numbers
     tables = helpers.extract_tables(uploaded_file, page_numbers_str)
     return tables
+
 
 # Function to extract text from PDF
 def extract_text(reader: PdfReader.pages, page_numbers_str: str = "all", mode: str = "plain") -> str:
     text = ""
+
     if page_numbers_str == "all":
         for page in reader.pages:
             text = text + " " + page.extract_text(extraction_mode=mode)
@@ -109,7 +75,9 @@ def extract_text(reader: PdfReader.pages, page_numbers_str: str = "all", mode: s
         pages = parse_page_numbers(page_numbers_str)
         for page in pages:
             text = text + " " + reader.pages[page].extract_text()
+
     return text
+
 
 # Function to extract images from PDF
 def extract_images(reader: PdfReader.pages, page_numbers_str: str = "all") -> dict:
@@ -117,11 +85,22 @@ def extract_images(reader: PdfReader.pages, page_numbers_str: str = "all") -> di
     if page_numbers_str == "all":
         for page in reader.pages:
             images |= {image.data: image.name for image in page.images}
+
     else:
         pages = parse_page_numbers(page_numbers_str)
         for page in pages:
-            images.update({image.data: image.name for image in reader.pages[page].images})
+            images.update(
+                {image.data: image.name for image in reader.pages[page].images}
+            )
+
     return images
+
+
+# Function to handle table extraction
+def extract_tables_from_pdf(pdf_reader, page_numbers):
+    tables = helpers.extract_tables(uploaded_file, page_numbers)
+    return tables
+
 
 # Function to convert table to CSV (You may need to implement this in helpers.py)
 def convert_table_to_csv(table):
@@ -131,6 +110,7 @@ def convert_table_to_csv(table):
     writer = csv.writer(output)
     writer.writerows(table)
     return output.getvalue()
+
 
 # Matching function for table extraction
 def match_terms_in_text(text):
@@ -148,7 +128,8 @@ def match_terms_in_text(text):
     
     return matches
 
-# Function to extract information matching specific terms
+
+# Function to extract tables and relevant information
 def extract_information_from_pdf(pdf_reader):
     info_data = []
     
@@ -161,7 +142,9 @@ def extract_information_from_pdf(pdf_reader):
     
     return info_data
 
+
 # ---------- MAIN SECTION ----------
+
 try:
     if uploaded_file is not None:
         # Read the uploaded PDF
@@ -176,14 +159,39 @@ try:
         # ---------- PDF OPERATIONS ----------
         if pdf_document != "password_required" and pdf_document:
 
-            # Convert the PDF to Markdown format
-            markdown_text = convert_pdf_to_markdown(pdf_document)
+            # Extract text from PDF
+            extracted_text = ""
+            for page_num in range(pdf_document.page_count):
+                page = pdf_document.load_page(page_num)
+                extracted_text += page.get_text("text")  # Basic text extraction
+
+            # Clean the extracted text
+            def clean_text(text):
+                text = text.lower()
+                text = re.sub(r'[^\w\s]', '', text)
+                text = re.sub(r'\s+', ' ', text).strip()
+                return text
+
+            cleaned_text = clean_text(extracted_text)
+
+            # Display the extracted and cleaned text
+            ##st.subheader("Extracted Text")
+            ##st.text_area("Text", cleaned_text, height=200)
 
             # Input for custom term to search for
             custom_term = st.text_input("Enter a term to analyze (e.g., 'eligibility')", "eligibility")
 
-            # Extract contextual mentions
-            context_data = extract_contextual_relationships(markdown_text, custom_term)
+            # 1. Contextual Relationship Extraction
+            def extract_contextual_relationships(text, term):
+                term = term.lower()
+                sentences = text.split('.')
+                context_data = []
+                for sentence in sentences:
+                    if term in sentence.lower():
+                        context_data.append(sentence.strip())
+                return context_data
+
+            context_data = extract_contextual_relationships(cleaned_text, custom_term)
             st.subheader(f"Contextual Mentions of '{custom_term.capitalize()}'")
             with st.expander("Expand to view Contextual Mentions"):
                 if context_data:
@@ -192,9 +200,66 @@ try:
                 else:
                     st.write(f"No mentions of '{custom_term}' found in the document.")
 
-            # 1. Extract relevant information matching the terms
-            info_data = extract_information_from_markdown(markdown_text, page_number=1)  # Assuming page_number for simplicity
-            st.subheader("Extracted Information for Specific Terms")
+            # 2. Summarize Mentions
+            def summarize_mentions(text, term):
+                term = term.lower()
+                sentences = text.split('.')
+                summary = []
+                for sentence in sentences:
+                    if term in sentence.lower():
+                        summary.append(sentence.strip())
+                return "\n".join(summary) if summary else f"No mentions of '{term}' found."
+
+            summary = summarize_mentions(cleaned_text, custom_term)
+            st.subheader(f"Summary of Mentions for '{custom_term.capitalize()}'")
+            st.text_area("Summary", summary, height=150)
+
+            # 3. Full Lines Containing the Term
+            def print_full_lines_with_term(text, term):
+                term = term.lower()
+                full_lines = []
+                lines = text.split("\n")
+                for line in lines:
+                    if term in line.lower():
+                        full_lines.append(line)
+                return "\n".join(full_lines)
+
+            full_lines = print_full_lines_with_term(extracted_text, custom_term)
+            st.subheader(f"Full Lines Containing '{custom_term.capitalize()}'")
+            st.text_area("Full Lines", full_lines, height=150)
+
+            # 4. Vectorization (Simple Bag of Words)
+            def vectorize(text):
+                tokens = text.split()
+                return Counter(tokens)
+
+            vectorized_text = vectorize(cleaned_text)
+            ##st.subheader("Word Frequency (Bag of Words)")
+            ##st.write(vectorized_text)
+
+
+            # 1. Table Extraction (Button to extract tables)
+            with st.expander("📊 Extract Tables from PDF"):
+                # Handle page number input
+                page_input = st.text_input("Enter page number(s) (e.g., '1', '1-3', 'all')", key="page_input")
+                if st.button("Extract Tables"):
+                    if page_input.lower() == "all":
+                        page_numbers = list(range(len(pdf_reader.pages)))
+                    else:
+                        try:
+                            page_numbers = parse_page_numbers(page_input)  # Pass page_input (as string) to the parser
+                        except ValueError:
+                            st.error("Invalid page numbers format. Please enter a valid page range or 'all'.")
+                            page_numbers = []
+                    if page_numbers:
+                        st.write(f"Extracting tables from pages: {page_numbers}")
+                        extract_tables_from_pdf(pdf_reader, page_numbers)
+                    else:
+                        st.warning("No valid pages selected for table extraction.")
+
+            # Extract information matching specific terms
+            info_data = extract_information_from_pdf(pdf_reader)
+            st.subheader("Extracted Information")
             if info_data:
                 info_df = pd.DataFrame(info_data, columns=["Term", "Full Text", "Page Number"])
                 st.dataframe(info_df)
