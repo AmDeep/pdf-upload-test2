@@ -1,15 +1,12 @@
 import os
-import sys
-import traceback
-from io import BytesIO
-import streamlit as st
-import fitz  # PyMuPDF
 import re
 import pandas as pd
+from io import BytesIO
 from pypdf import PdfReader
-from pypdf.errors import FileNotDecryptedError
-from streamlit import session_state
 from collections import Counter
+import streamlit as st
+import fitz  # PyMuPDF
+import traceback
 from utils import helpers, init_session_states, page_config
 
 # Set up the page config
@@ -28,12 +25,11 @@ st.write(
 st.subheader("Upload Your PDF File")
 uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
-# ---------- FIXED parse_page_numbers function -----------
+# Function to parse page numbers from a string
 @st.cache_data
 def parse_page_numbers(page_numbers_str):
     parts = page_numbers_str.split(",")
     parsed_page_numbers = []
-
     for part in parts:
         part = part.strip()
         if "-" in part:
@@ -41,19 +37,18 @@ def parse_page_numbers(page_numbers_str):
             parsed_page_numbers.extend(range(start, end + 1))
         else:
             parsed_page_numbers.append(int(part))
-
     return [i - 1 for i in parsed_page_numbers]
 
 # Function to extract text from PDF
-def extract_text(reader: PdfReader.pages, page_numbers_str: str = "all", mode: str = "plain") -> str:
+def extract_text(reader, page_numbers_str="all", mode="plain"):
     text = ""
     if page_numbers_str == "all":
         for page in reader.pages:
-            text = text + " " + page.extract_text(extraction_mode=mode)
+            text += " " + page.extract_text(extraction_mode=mode)
     else:
         pages = parse_page_numbers(page_numbers_str)
         for page in pages:
-            text = text + " " + reader.pages[page].extract_text()
+            text += " " + reader.pages[page].extract_text()
     return text
 
 # Function to convert PDF to Markdown
@@ -64,25 +59,23 @@ def pdf_to_markdown(pdf_document):
         markdown_text += page.get_text("markdown")
     return markdown_text
 
-# Function to dynamically extract relevant information from the PDF based on specified terms
-def extract_relevant_information(pdf_reader, terms):
-    info_data = {term: None for term in terms}  # Initialize dictionary to store the first occurrence of each term
-
-    for page_num, page in enumerate(pdf_reader.pages):
-        text = page.extract_text()
-        for term in terms:
-            if info_data[term] is None:  # Check if term has already been found
-                pattern = rf"({term}.*?)(?=\n|$)"
-                match = re.search(pattern, text, re.IGNORECASE)
-                if match:
-                    info_data[term] = [term, clean_response(match.group(1), term), page_num + 1]
-
-    return [[term, info_data[term][1] if info_data[term] else "", info_data[term][2] if info_data[term] else ""] for term in terms]
-
 # Function to clean the response text
 def clean_response(response, term):
     term_lower = term.lower()
     return re.sub(rf"{term_lower}:?", "", response, flags=re.IGNORECASE).strip()
+
+# Function to dynamically extract relevant information from the PDF based on specified terms
+def extract_relevant_information(pdf_reader, terms):
+    info_data = {term: None for term in terms}
+    for page_num, page in enumerate(pdf_reader.pages):
+        text = page.extract_text()
+        for term in terms:
+            if info_data[term] is None:
+                pattern = rf"({term}.*?)(?=\n|$)"
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    info_data[term] = [term, clean_response(match.group(1), term), page_num + 1]
+    return [[term, info_data[term][1] if info_data[term] else "", info_data[term][2] if info_data[term] else ""] for term in terms]
 
 # Function to handle table extraction
 def extract_tables_from_pdf(pdf_reader, page_numbers):
@@ -90,9 +83,9 @@ def extract_tables_from_pdf(pdf_reader, page_numbers):
     return tables
 
 # ---------- MAIN SECTION ----------
+
 try:
     if uploaded_file is not None:
-        # Read the uploaded PDF
         try:
             pdf_document = fitz.open(stream=uploaded_file.read(), filetype="pdf")
             pdf_reader = PdfReader(uploaded_file)
@@ -101,18 +94,15 @@ try:
             pdf_document = "password_required"
             st.error("PDF is password protected. Please enter the password to proceed.")
 
-        # ---------- PDF OPERATIONS ----------
         if pdf_document != "password_required" and pdf_document:
-            # Extract text from PDF
+
             extracted_text = ""
             for page_num in range(pdf_document.page_count):
                 page = pdf_document.load_page(page_num)
-                extracted_text += page.get_text("text")  # Basic text extraction
+                extracted_text += page.get_text("text")
 
-            # Convert PDF to Markdown
             markdown_text = pdf_to_markdown(pdf_document)
 
-            # Clean the extracted text
             def clean_text(text):
                 text = text.lower()
                 text = re.sub(r'[^\w\s]', '', text)
@@ -121,44 +111,8 @@ try:
 
             cleaned_text = clean_text(extracted_text)
 
-            # Define the terms to extract
-            terms_to_extract = [
-                "Plan name", "Trustee", "EIN", "Year End", "Entity Type", "Entity State",
-                "Is it a safe harbor", "Vesting", "Profit sharing vesting", "Plan Type",
-                "Compensation Definition", "Deferral Change Frequency", "Match Frequency",
-                "Entry date", "Match Entry Date", "Profit share entry date", "Minimum age",
-                "Match minimum age", "Profit share minimum age", "Eligibility delay", 
-                "Match eligibility delay", "Profit share eligibility delay", "Eligibility delay rolling",
-                "Hours of service", "Plan effective date", "Plan restatement date", "Plan number",
-                "Agreed to edocs", "Agreed for self direct for participants", "Auto enroll", 
-                "Auto enroll percent", "Profit share requires last day", "Safe harbor exclude highly compensated employees", 
-                "Loans permitted", "Auto rollover", "Allow roth employer contribution"
-            ]
-
-            # Extract information matching specific terms
-            info_data = extract_relevant_information(pdf_reader, terms_to_extract)
-
-            with st.container():
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.subheader("Extracted Information")
-                    info_df = pd.DataFrame(info_data, columns=["Term", "Response", "Page Number"])
-                    st.dataframe(info_df)
-                with col2:
-                    st.subheader("Document Preview")
-                    preview_area = st.empty()
-                    preview_area.markdown('<div style="height:400px; overflow-y:scroll; width:300px;">', unsafe_allow_html=True)
-                    for page_num in range(pdf_document.page_count):
-                        page = pdf_document.load_page(page_num)
-                        pix = page.get_pixmap()
-                        img_data = pix.tobytes("png")
-                        preview_area.image(img_data, caption=f"Page {page_num + 1}", use_column_width=True)
-                    preview_area.markdown("</div>", unsafe_allow_html=True)
-
-            # --- ENTER TERM TO ANALYZE ---
             custom_term = st.text_input("Enter a term to analyze (e.g., 'eligibility')", "eligibility")
 
-            # --- CONTEXTUAL MENTIONS ---
             def extract_contextual_relationships(text, term):
                 term = term.lower()
                 sentences = text.split('.')
@@ -177,7 +131,6 @@ try:
                 else:
                     st.write(f"No mentions of '{custom_term}' found in the document.")
 
-            # --- SUMMARY OF MENTIONS ---
             def summarize_mentions(text, term):
                 term = term.lower()
                 sentences = text.split('.')
@@ -191,7 +144,6 @@ try:
             st.subheader(f"Summary of Mentions for '{custom_term.capitalize()}'")
             st.text_area("Summary", summary, height=150)
 
-            # --- FULL LINES CONTAINING THE TERM ---
             def print_full_lines_with_term(text, term):
                 term = term.lower()
                 full_lines = []
@@ -205,14 +157,39 @@ try:
             st.subheader(f"Full Lines Containing '{custom_term.capitalize()}'")
             st.text_area("Full Lines", full_lines, height=150)
 
-            # --- VECTORIZATION (SIMPLE BAG OF WORDS) ---
             def vectorize(text):
                 tokens = text.split()
                 return Counter(tokens)
 
             vectorized_text = vectorize(cleaned_text)
-            st.subheader("Word Frequency (Bag of Words)")
-            st.write(vectorized_text)
+
+            terms_to_extract = [
+                "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE",
+                "Safe harbor", "Vesting", "Profit Sharing vesting", "Plan Type",
+                "Compensation Definition", "Defferal change frequency", "Match frequency",
+                "Entry date", "Match Entry date", "Profit share entry date", "Minimum age",
+                "Match Minimum age", "Profit Share Minimum Age", "Eligibility delay"
+            ]
+
+            info_data = extract_relevant_information(pdf_reader, terms_to_extract)
+
+            with st.container():
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.subheader("Extracted Information")
+                    info_df = pd.DataFrame(info_data, columns=["Term", "Response", "Page Number"])
+                    st.dataframe(info_df)
+                with col2:
+                    st.subheader("Document Preview")
+                    preview_area = st.empty()
+                    preview_area.markdown(
+                        '<div style="height:400px; overflow-y:scroll; width:300px;">', unsafe_allow_html=True)
+                    for page_num in range(pdf_document.page_count):
+                        page = pdf_document.load_page(page_num)
+                        pix = page.get_pixmap()
+                        img_data = pix.tobytes("png")
+                        preview_area.image(img_data, caption=f"Page {page_num + 1}", use_column_width=True)
+                    preview_area.markdown("</div>", unsafe_allow_html=True)
 
         else:
             st.error("Unable to process the PDF. It may be password protected.")
