@@ -219,12 +219,12 @@ try:
                     st.subheader("Document Preview")
                     preview_area = st.empty()
                     preview_area.markdown(
-                        '<div style="height:600px; overflow-y:scroll; width:300px;">', unsafe_allow_html=True)
+                        '<div style="height:400px; overflow-y:scroll; width:300px;">', unsafe_allow_html=True)
                     for page_num in range(pdf_document.page_count):
                         page = pdf_document.load_page(page_num)
                         pix = page.get_pixmap()
-                        img = pix.getPNGData()
-                        preview_area.image(img, caption=f"Page {page_num + 1}", use_column_width=True)
+                        img_data = pix.tobytes("png")
+                        preview_area.image(img_data, caption=f"Page {page_num + 1}", use_column_width=True)
                     preview_area.markdown("</div>", unsafe_allow_html=True)
 
         else:
