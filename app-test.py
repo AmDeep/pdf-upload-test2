@@ -46,7 +46,7 @@ def parse_page_numbers(page_numbers_str):
         # If the part contains a hyphen, it represents a range
         if "-" in part:
             start, end = map(int, part.split("-"))
-            parsed_page_numbers.extend(range(start, end + 1))
+            parsed_page_numbers extend(range(start, end + 1))
         else:
             # Otherwise, it's a single page number
             parsed_page_numbers.append(int(part))
@@ -86,9 +86,13 @@ def extract_relevant_information(pdf_reader, terms):
                 pattern = rf"({term}.*?)(?=\n|$)"
                 match = re.search(pattern, text, re.IGNORECASE)
                 if match:
-                    info_data[term] = [term, match.group(1), page_num + 1]
+                    info_data[term] = [term, clean_response(match.group(1), term), page_num + 1]
     
-    return [info_data[term] for term in terms if info_data[term] is not None]
+    return [[term, info_data[term][1] if info_data[term] else "", info_data[term][2] if info_data[term] else ""] for term in terms]
+
+# Function to clean the response text
+def clean_response(response, term):
+    return response.replace(f"{term}:", "").strip()
 
 # Function to handle table extraction
 def extract_tables_from_pdf(pdf_reader, page_numbers):
@@ -209,6 +213,14 @@ try:
                 st.dataframe(info_df)
             else:
                 st.write("No relevant information found in the document.")
+
+            # Display a preview of the uploaded document to the right side of the table
+            st.subheader("Document Preview")
+            for page_num in range(pdf_document.page_count):
+                page = pdf_document.load_page(page_num)
+                pix = page.get_pixmap()
+                img_data = pix.tobytes("png")
+                st.image(img_data, caption=f"Page {page_num + 1}", use_column_width=True)
 
         else:
             st.error("Unable to process the PDF. It may be password protected.")
