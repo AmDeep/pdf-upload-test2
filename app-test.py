@@ -216,17 +216,16 @@ try:
                 st.write("No relevant information found in the document.")
 
             # Display a preview of the uploaded document to the right side of the table
-            st.subheader("Document Preview")
-            preview_container = st.container()
-            with preview_container:
-                preview_columns = st.columns(2)
-                with preview_columns[0]:
-                    st.write("Extracted Information")
-                with preview_columns[1]:
-                    st.write("Document Preview")
+            with st.container():
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.subheader("Extracted Information")
+                    st.dataframe(info_df)
+                with col2:
+                    st.subheader("Document Preview")
                     preview_area = st.empty()
                     preview_area.markdown(
-                        '<div style="height:500px; overflow-y:scroll; width:600px;">', unsafe_allow_html=True)
+                        '<div style="height:400px; overflow-y:scroll; width:300px;">', unsafe_allow_html=True)
                     for page_num in range(pdf_document.page_count):
                         page = pdf_document.load_page(page_num)
                         pix = page.get_pixmap()
