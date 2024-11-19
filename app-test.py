@@ -208,18 +208,12 @@ try:
 
             # Extract information matching specific terms
             info_data = extract_relevant_information(pdf_reader, terms_to_extract)
-            st.subheader("Extracted Information")
-            if info_data:
-                info_df = pd.DataFrame(info_data, columns=["Term", "Response", "Page Number"])
-                st.dataframe(info_df)
-            else:
-                st.write("No relevant information found in the document.")
 
-            # Display a preview of the uploaded document to the right side of the table
             with st.container():
                 col1, col2 = st.columns([2, 1])
                 with col1:
                     st.subheader("Extracted Information")
+                    info_df = pd.DataFrame(info_data, columns=["Term", "Response", "Page Number"])
                     st.dataframe(info_df)
                 with col2:
                     st.subheader("Document Preview")
