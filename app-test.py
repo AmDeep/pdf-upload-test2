@@ -2,7 +2,7 @@ import os
 import re
 import pandas as pd
 from io import BytesIO
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfReadError
 from collections import Counter
 import streamlit as st
 import fitz  # PyMuPDF
@@ -64,7 +64,7 @@ def clean_response(response, term):
     term_lower = term.lower()
     return re.sub(rf"{term_lower}:?", "", response, flags=re.IGNORECASE).strip()
 
-# Function to dynamically extract relevant information from the PDF based on specified terms
+# Enhanced function to dynamically extract relevant information from the PDF based on specified terms
 def extract_relevant_information(pdf_reader, terms):
     info_data = {term: None for term in terms}
     for page_num, page in enumerate(pdf_reader.pages):
@@ -74,8 +74,18 @@ def extract_relevant_information(pdf_reader, terms):
                 pattern = rf"({term}.*?)(?=\n|$)"
                 match = re.search(pattern, text, re.IGNORECASE)
                 if match:
-                    info_data[term] = [term, clean_response(match.group(1), term), page_num + 1]
+                    response = clean_response(match.group(1), term)
+                    if not response:
+                        response = extract_contextual_response(text, term)
+                    info_data[term] = [term, response, page_num + 1]
     return [[term, info_data[term][1] if info_data[term] else "", info_data[term][2] if info_data[term] else ""] for term in terms]
+
+# Function to extract contextual responses
+def extract_contextual_response(text, term):
+    term_lower = term.lower()
+    pattern = rf"({term_lower}.*?)(?=\n|$)"
+    match = re.search(pattern, text, re.IGNORECASE)
+    return clean_response(match.group(1), term) if match else ""
 
 # Function to handle table extraction
 def extract_tables_from_pdf(pdf_reader, page_numbers):
@@ -90,7 +100,7 @@ try:
             pdf_document = fitz.open(stream=uploaded_file.read(), filetype="pdf")
             pdf_reader = PdfReader(uploaded_file)
             session_state["password"], session_state["is_encrypted"] = "", False
-        except FileNotDecryptedError:
+        except PdfReadError:
             pdf_document = "password_required"
             st.error("PDF is password protected. Please enter the password to proceed.")
 
@@ -151,7 +161,7 @@ try:
                 for line in lines:
                     if term in line.lower():
                         full_lines.append(line)
-                return "\n".join(full_lines)
+                return "\n.join(full_lines)"
 
             full_lines = print_full_lines_with_term(extracted_text, custom_term)
             st.subheader(f"Full Lines Containing '{custom_term.capitalize()}'")
