@@ -46,7 +46,7 @@ def parse_page_numbers(page_numbers_str):
         # If the part contains a hyphen, it represents a range
         if "-" in part:
             start, end = map(int, part.split("-"))
-            parsed_page_numbers extend(range(start, end + 1))
+            parsed_page_numbers.extend(range(start, end + 1))
         else:
             # Otherwise, it's a single page number
             parsed_page_numbers.append(int(part))
