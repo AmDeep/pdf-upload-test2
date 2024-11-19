@@ -2,7 +2,7 @@ import os
 import re
 import pandas as pd
 from io import BytesIO
-from pypdf import PdfReader, PdfReadError
+from pypdf import PdfReader
 from collections import Counter
 import streamlit as st
 import fitz  # PyMuPDF
@@ -100,9 +100,9 @@ try:
             pdf_document = fitz.open(stream=uploaded_file.read(), filetype="pdf")
             pdf_reader = PdfReader(uploaded_file)
             session_state["password"], session_state["is_encrypted"] = "", False
-        except PdfReadError:
+        except Exception as e:
             pdf_document = "password_required"
-            st.error("PDF is password protected. Please enter the password to proceed.")
+            st.error(f"PDF is password protected or an error occurred: {e}")
 
         if pdf_document != "password_required" and pdf_document:
 
@@ -161,7 +161,7 @@ try:
                 for line in lines:
                     if term in line.lower():
                         full_lines.append(line)
-                return "\n.join(full_lines)"
+                return "\n".join(full_lines)
 
             full_lines = print_full_lines_with_term(extracted_text, custom_term)
             st.subheader(f"Full Lines Containing '{custom_term.capitalize()}'")
