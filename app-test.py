@@ -2,7 +2,7 @@ import os
 import re
 import pandas as pd
 from io import BytesIO
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfReadError
 from collections import Counter
 import streamlit as st
 import fitz  # PyMuPDF
@@ -99,110 +99,110 @@ try:
         try:
             pdf_document = fitz.open(stream=uploaded_file.read(), filetype="pdf")
             pdf_reader = PdfReader(uploaded_file)
-            session_state["password"], session_state["is_encrypted"] = "", False
+            is_encrypted = pdf_reader.is_encrypted
+            if is_encrypted:
+                st.error("PDF is password protected. Please provide the password.")
+            else:
+                extracted_text = ""
+                for page_num in range(pdf_document.page_count):
+                    page = pdf_document.load_page(page_num)
+                    extracted_text += page.get_text("text")
+
+                markdown_text = pdf_to_markdown(pdf_document)
+
+                def clean_text(text):
+                    text = text.lower()
+                    text = re.sub(r'[^\w\s]', '', text)
+                    text = re.sub(r'\s+', ' ', text).strip()
+                    return text
+
+                cleaned_text = clean_text(extracted_text)
+
+                custom_term = st.text_input("Enter a term to analyze (e.g., 'eligibility')", "eligibility")
+
+                def extract_contextual_relationships(text, term):
+                    term = term.lower()
+                    sentences = text.split('.')
+                    context_data = []
+                    for sentence in sentences:
+                        if term in sentence.lower():
+                            context_data.append(sentence.strip())
+                    return context_data
+
+                context_data = extract_contextual_relationships(cleaned_text, custom_term)
+                st.subheader(f"Contextual Mentions of '{custom_term.capitalize()}'")
+                with st.expander("Expand to view Contextual Mentions"):
+                    if context_data:
+                        for entry in context_data:
+                            st.write(f"- {entry}")
+                    else:
+                        st.write(f"No mentions of '{custom_term}' found in the document.")
+
+                def summarize_mentions(text, term):
+                    term = term.lower()
+                    sentences = text.split('.')
+                    summary = []
+                    for sentence in sentences:
+                        if term in sentence.lower():
+                            summary.append(sentence.strip())
+                    return "\n".join(summary) if summary else f"No mentions of '{term}' found."
+
+                summary = summarize_mentions(cleaned_text, custom_term)
+                st.subheader(f"Summary of Mentions for '{custom_term.capitalize()}'")
+                st.text_area("Summary", summary, height=150)
+
+                def print_full_lines_with_term(text, term):
+                    term = term.lower()
+                    full_lines = []
+                    lines = text.split("\n")
+                    for line in lines:
+                        if term in line.lower():
+                            full_lines.append(line)
+                    return "\n".join(full_lines)
+
+                full_lines = print_full_lines_with_term(extracted_text, custom_term)
+                st.subheader(f"Full Lines Containing '{custom_term.capitalize()}'")
+                st.text_area("Full Lines", full_lines, height=150)
+
+                def vectorize(text):
+                    tokens = text.split()
+                    return Counter(tokens)
+
+                vectorized_text = vectorize(cleaned_text)
+
+                terms_to_extract = [
+                    "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE",
+                    "Safe harbor", "Vesting", "Profit Sharing vesting", "Plan Type",
+                    "Compensation Definition", "Defferal change frequency", "Match frequency",
+                    "Entry date", "Match Entry date", "Profit share entry date", "Minimum age",
+                    "Match Minimum age", "Profit Share Minimum Age", "Eligibility delay"
+                ]
+
+                info_data = extract_relevant_information(pdf_reader, terms_to_extract)
+
+                with st.container():
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        st.subheader("Extracted Information")
+                        info_df = pd.DataFrame(info_data, columns=["Term", "Response", "Page Number"])
+                        st.dataframe(info_df)
+                    with col2:
+                        st.subheader("Document Preview")
+                        preview_area = st.empty()
+                        preview_area.markdown(
+                            '<div style="height:400px; overflow-y:scroll; width:300px;">', unsafe_allow_html=True)
+                        for page_num in range(pdf_document.page_count):
+                            page = pdf_document.load_page(page_num)
+                            pix = page.get_pixmap()
+                            img_data = pix.tobytes("png")
+                            preview_area.image(img_data, caption=f"Page {page_num + 1}", use_column_width=True)
+                        preview_area.markdown("</div>", unsafe_allow_html=True)
+
+        except PdfReadError as e:
+            st.error(f"PDF read error: {e}")
         except Exception as e:
-            pdf_document = "password_required"
-            st.error(f"PDF is password protected or an error occurred: {e}")
-
-        if pdf_document != "password_required" and pdf_document:
-
-            extracted_text = ""
-            for page_num in range(pdf_document.page_count):
-                page = pdf_document.load_page(page_num)
-                extracted_text += page.get_text("text")
-
-            markdown_text = pdf_to_markdown(pdf_document)
-
-            def clean_text(text):
-                text = text.lower()
-                text = re.sub(r'[^\w\s]', '', text)
-                text = re.sub(r'\s+', ' ', text).strip()
-                return text
-
-            cleaned_text = clean_text(extracted_text)
-
-            custom_term = st.text_input("Enter a term to analyze (e.g., 'eligibility')", "eligibility")
-
-            def extract_contextual_relationships(text, term):
-                term = term.lower()
-                sentences = text.split('.')
-                context_data = []
-                for sentence in sentences:
-                    if term in sentence.lower():
-                        context_data.append(sentence.strip())
-                return context_data
-
-            context_data = extract_contextual_relationships(cleaned_text, custom_term)
-            st.subheader(f"Contextual Mentions of '{custom_term.capitalize()}'")
-            with st.expander("Expand to view Contextual Mentions"):
-                if context_data:
-                    for entry in context_data:
-                        st.write(f"- {entry}")
-                else:
-                    st.write(f"No mentions of '{custom_term}' found in the document.")
-
-            def summarize_mentions(text, term):
-                term = term.lower()
-                sentences = text.split('.')
-                summary = []
-                for sentence in sentences:
-                    if term in sentence.lower():
-                        summary.append(sentence.strip())
-                return "\n".join(summary) if summary else f"No mentions of '{term}' found."
-
-            summary = summarize_mentions(cleaned_text, custom_term)
-            st.subheader(f"Summary of Mentions for '{custom_term.capitalize()}'")
-            st.text_area("Summary", summary, height=150)
-
-            def print_full_lines_with_term(text, term):
-                term = term.lower()
-                full_lines = []
-                lines = text.split("\n")
-                for line in lines:
-                    if term in line.lower():
-                        full_lines.append(line)
-                return "\n".join(full_lines)
-
-            full_lines = print_full_lines_with_term(extracted_text, custom_term)
-            st.subheader(f"Full Lines Containing '{custom_term.capitalize()}'")
-            st.text_area("Full Lines", full_lines, height=150)
-
-            def vectorize(text):
-                tokens = text.split()
-                return Counter(tokens)
-
-            vectorized_text = vectorize(cleaned_text)
-
-            terms_to_extract = [
-                "NAME", "TRUSTEE", "EIN", "YEAR END", "ENTITY TYPE", "ENTITY STATE",
-                "Safe harbor", "Vesting", "Profit Sharing vesting", "Plan Type",
-                "Compensation Definition", "Defferal change frequency", "Match frequency",
-                "Entry date", "Match Entry date", "Profit share entry date", "Minimum age",
-                "Match Minimum age", "Profit Share Minimum Age", "Eligibility delay"
-            ]
-
-            info_data = extract_relevant_information(pdf_reader, terms_to_extract)
-
-            with st.container():
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.subheader("Extracted Information")
-                    info_df = pd.DataFrame(info_data, columns=["Term", "Response", "Page Number"])
-                    st.dataframe(info_df)
-                with col2:
-                    st.subheader("Document Preview")
-                    preview_area = st.empty()
-                    preview_area.markdown(
-                        '<div style="height:400px; overflow-y:scroll; width:300px;">', unsafe_allow_html=True)
-                    for page_num in range(pdf_document.page_count):
-                        page = pdf_document.load_page(page_num)
-                        pix = page.get_pixmap()
-                        img_data = pix.tobytes("png")
-                        preview_area.image(img_data, caption=f"Page {page_num + 1}", use_column_width=True)
-                    preview_area.markdown("</div>", unsafe_allow_html=True)
-
-        else:
-            st.error("Unable to process the PDF. It may be password protected.")
+            st.error(f"An error occurred: {e}")
+            st.write(traceback.format_exc())
 
 except Exception as e:
     st.error(f"An error occurred: {e}")
