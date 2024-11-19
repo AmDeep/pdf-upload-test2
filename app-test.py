@@ -92,7 +92,8 @@ def extract_relevant_information(pdf_reader, terms):
 
 # Function to clean the response text
 def clean_response(response, term):
-    return response.replace(f"{term}:", "").strip()
+    term_lower = term.lower()
+    return re.sub(rf"{term_lower}:?", "", response, flags=re.IGNORECASE).strip()
 
 # Function to handle table extraction
 def extract_tables_from_pdf(pdf_reader, page_numbers):
@@ -215,12 +216,22 @@ try:
                 st.write("No relevant information found in the document.")
 
             # Display a preview of the uploaded document to the right side of the table
-            st.subheader("Document Preview")
-            for page_num in range(pdf_document.page_count):
-                page = pdf_document.load_page(page_num)
-                pix = page.get_pixmap()
-                img_data = pix.tobytes("png")
-                st.image(img_data, caption=f"Page {page_num + 1}", use_column_width=True)
+            with st.container():
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.subheader("Extracted Information")
+                    st.dataframe(info_df)
+                with col2:
+                    st.subheader("Document Preview")
+                    preview_area = st.empty()
+                    preview_area.markdown(
+                        '<div style="height:400px; overflow-y:scroll; width:300px;">', unsafe_allow_html=True)
+                    for page_num in range(pdf_document.page_count):
+                        page = pdf_document.load_page(page_num)
+                        pix = page.get_pixmap()
+                        img_data = pix.tobytes("png")
+                        preview_area.image(img_data, caption=f"Page {page_num + 1}", use_column_width=True)
+                    preview_area.markdown("</div>", unsafe_allow_html=True)
 
         else:
             st.error("Unable to process the PDF. It may be password protected.")
