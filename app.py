@@ -6,12 +6,21 @@ import streamlit as st
 import fitz  # PyMuPDF
 import re
 import pandas as pd
-import pdfplumber
 from pypdf import PdfReader
 from pypdf.errors import FileNotDecryptedError
 from streamlit import session_state
 from collections import Counter  # <-- Add this import for the Counter class
 from utils import helpers, init_session_states, page_config
+from dotenv import load_dotenv
+import openai
+
+# Load environment variables from the .env file
+load_dotenv()
+
+# Get the OpenAI API key from the environment variable
+openai.api_key = os.getenv(
+    "OPENAI_API_KEY"
+)  # Ensure your OpenAI API key is set (you can replace this with your actual key)
 
 # Set up the page config
 page_config.set()
@@ -30,46 +39,22 @@ st.subheader("Upload Your PDF File")
 uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
 # ---------- FIXED parse_page_numbers function -----------
-
 @st.cache_data
 def parse_page_numbers(page_numbers_str):
-    # Split the input string by comma or hyphen
     parts = page_numbers_str.split(",")
-
-    # Initialize an empty list to store parsed page numbers
     parsed_page_numbers = []
-
-    # Iterate over each part
     for part in parts:
-        # Remove any leading/trailing spaces
         part = part.strip()
-
-        # If the part contains a hyphen, it represents a range
         if "-" in part:
             start, end = map(int, part.split("-"))
             parsed_page_numbers.extend(range(start, end + 1))
         else:
-            # Otherwise, it's a single page number
             parsed_page_numbers.append(int(part))
-
     return [i - 1 for i in parsed_page_numbers]
-
-
-# Function to extract tables and preview pages from PDF
-def extract_tables_from_pdf(pdf_reader, page_numbers):
-    # Convert list of page numbers to a comma-separated string
-    page_numbers_str = ",".join(map(str, page_numbers)) if isinstance(page_numbers, list) else page_numbers
-    
-    # Call the helpers.extract_tables function with the correct string format for page numbers
-    tables = helpers.extract_tables(uploaded_file, page_numbers_str)
-    return tables
-
-
 
 # Function to extract text from PDF
 def extract_text(reader: PdfReader.pages, page_numbers_str: str = "all", mode: str = "plain") -> str:
     text = ""
-
     if page_numbers_str == "all":
         for page in reader.pages:
             text = text + " " + page.extract_text(extraction_mode=mode)
@@ -77,45 +62,77 @@ def extract_text(reader: PdfReader.pages, page_numbers_str: str = "all", mode: s
         pages = parse_page_numbers(page_numbers_str)
         for page in pages:
             text = text + " " + reader.pages[page].extract_text()
-
     return text
 
+# Function to convert PDF to Markdown
+def pdf_to_markdown(pdf_document):
+    markdown_text = ""
+    for page_num in range(pdf_document.page_count):
+        page = pdf_document.load_page(page_num)
+        markdown_text += page.get_text("markdown")
+    return markdown_text
 
-# Function to extract images from PDF
-def extract_images(reader: PdfReader.pages, page_numbers_str: str = "all") -> dict:
-    images = {}
-    if page_numbers_str == "all":
-        for page in reader.pages:
-            images |= {image.data: image.name for image in page.images}
+# Function to query OpenAI for relevant data extraction
+def query_openai(text, term):
+    # Define the prompt template for OpenAI to extract information about each term
+    prompt = f"""
+    Pull the following in a table with the following columns:
+    Term | Response | Page number
+    
+    Here are the 20 things we need with the response options in parentheses:
+    Plan name (free text)
+    Trustee (free text)
+    EIN (integers)
+    Year End  (date)
+    Entity Type (C corp, S corp, non profit, partnership, LLC taxed as a s corp, LLC taxed as a c corp, LLC taxed as sole proprietor, Limited Liability Partnership, Sole Proprietorship, union, government agency, other)   
+    Entity State (free text)
+    Is it a safe harbor (No, Yes - safe harbor match, Yes - nonelective contribution, Yes - QACA safe harbor match, Yes - enhanced safe harbor match, Yes - QACA nonelective contribution)
+    Vesting(100% Vested, 2 - 6 Year Graded, 1 - 5 Year Graded, 2 Year 50/50, 1 - 4 Year Graded, 3 Year Cliff, 2 Year Cliff, 1 Year Cliff)
+    Profit sharing vesting (100% Vested, 2 - 6 Year Graded, 1 - 5 Year Graded, 2 Year 50/50, 1 - 4 Year Graded, 3 Year Cliff, 2 Year Cliff, 1 Year Cliff)
+    Plan Type (free text)
 
-    else:
-        pages = parse_page_numbers(page_numbers_str)
-        for page in pages:
-            images.update(
-                {image.data: image.name for image in reader.pages[page].images}
-            )
+    {text}
+    """
+    
+    try:
+        # Query OpenAI API to extract relevant data based on the term
+        response = openai.Completion.create(
+            model="gpt-4",  # Use a GPT model (adjust for GPT-4 or other models if necessary)
+            prompt=prompt,
+            max_tokens=1500,  # Set max tokens for the response
+            temperature=0.5,  # Control randomness
+            n=1,
+            stop=None
+        )
+        # Return the extracted response from OpenAI
+        return response.choices[0].text.strip()
+    except Exception as e:
+        # Handle errors in case of issues with the OpenAI API
+        print(f"Error querying OpenAI: {e}")
+        return None
 
-    return images
+# Function to extract relevant information from the PDF based on terms
+def extract_relevant_information(pdf_reader, terms):
+    info_data = {term: None for term in terms}  # Initialize dictionary to store term info
 
+    # Iterate over each page of the PDF and extract the relevant data
+    for page_num, page in enumerate(pdf_reader.pages):
+        text = page.extract_text()  # Extract text from the current page
+        if text:
+            # Loop over each term and extract information using OpenAI
+            for term in terms:
+                if info_data[term] is None:  # Only process if the term hasn't been found yet
+                    extracted_info = query_openai(text, term)  # Get information from OpenAI
+                    if extracted_info:  # If OpenAI returned something
+                        info_data[term] = [term, extracted_info, page_num + 1]  # Save term, data, and page number
 
-# Function to handle table extraction
-def extract_tables_from_pdf(pdf_reader, page_numbers):
-    tables = helpers.extract_tables(uploaded_file, page_numbers)
-    return tables
-
-
-# Function to convert table to CSV (You may need to implement this in helpers.py)
-def convert_table_to_csv(table):
-    import io
-    import csv
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerows(table)
-    return output.getvalue()
-
+    # Return the data in a structured format: [[term, extracted_info, page_number], ...]
+    return [
+        [term, info_data[term][1] if info_data[term] else "", info_data[term][2] if info_data[term] else ""]
+        for term in terms
+    ]
 
 # ---------- MAIN SECTION ----------
-
 try:
     if uploaded_file is not None:
         # Read the uploaded PDF
@@ -145,87 +162,32 @@ try:
 
             cleaned_text = clean_text(extracted_text)
 
-            # Display the extracted and cleaned text
-            ##st.subheader("Extracted Text")
-            ##st.text_area("Text", cleaned_text, height=200)
+            # Define the terms to extract
+            terms_to_extract = [
+                "Plan name", "Trustee", "EIN", "Year End", "Entity Type", "Entity State",
+                "Is it a safe harbor", "Vesting", "Profit sharing vesting", "Plan Type"
+            ]
 
-            # Input for custom term to search for
-            custom_term = st.text_input("Enter a term to analyze (e.g., 'eligibility')", "eligibility")
+            # Extract information matching specific terms using OpenAI
+            extracted_info = extract_relevant_information(pdf_reader, terms_to_extract)
 
-            # 1. Contextual Relationship Extraction
-            def extract_contextual_relationships(text, term):
-                term = term.lower()
-                sentences = text.split('.')
-                context_data = []
-                for sentence in sentences:
-                    if term in sentence.lower():
-                        context_data.append(sentence.strip())
-                return context_data
-
-            context_data = extract_contextual_relationships(cleaned_text, custom_term)
-            st.subheader(f"Contextual Mentions of '{custom_term.capitalize()}'")
-            if context_data:
-                for entry in context_data:
-                    st.write(f"- {entry}")
-            else:
-                st.write(f"No mentions of '{custom_term}' found in the document.")
-
-            # 2. Summarize Mentions
-            def summarize_mentions(text, term):
-                term = term.lower()
-                sentences = text.split('.')
-                summary = []
-                for sentence in sentences:
-                    if term in sentence.lower():
-                        summary.append(sentence.strip())
-                return "\n".join(summary) if summary else f"No mentions of '{term}' found."
-
-            summary = summarize_mentions(cleaned_text, custom_term)
-            st.subheader(f"Summary of Mentions for '{custom_term.capitalize()}'")
-            st.text_area("Summary", summary, height=150)
-
-            # 3. Full Lines Containing the Term
-            def print_full_lines_with_term(text, term):
-                term = term.lower()
-                full_lines = []
-                lines = text.split("\n")
-                for line in lines:
-                    if term in line.lower():
-                        full_lines.append(line)
-                return "\n".join(full_lines)
-
-            full_lines = print_full_lines_with_term(extracted_text, custom_term)
-            st.subheader(f"Full Lines Containing '{custom_term.capitalize()}'")
-            st.text_area("Full Lines", full_lines, height=150)
-
-            # 4. Vectorization (Simple Bag of Words)
-            def vectorize(text):
-                tokens = text.split()
-                return Counter(tokens)
-
-            vectorized_text = vectorize(cleaned_text)
-            ##st.subheader("Word Frequency (Bag of Words)")
-            ##st.write(vectorized_text)
-
-
-            # 1. Table Extraction (Button to extract tables)
-            with st.expander("📊 Extract Tables from PDF"):
-                # Handle page number input
-                page_input = st.text_input("Enter page number(s) (e.g., '1', '1-3', 'all')", key="page_input")
-                if st.button("Extract Tables"):
-                    if page_input.lower() == "all":
-                        page_numbers = list(range(len(pdf_reader.pages)))
-                    else:
-                        try:
-                            page_numbers = parse_page_numbers(page_input)  # Pass page_input (as string) to the parser
-                        except ValueError:
-                            st.error("Invalid page numbers format. Please enter a valid page range or 'all'.")
-                            page_numbers = []
-                    if page_numbers:
-                        st.write(f"Extracting tables from pages: {page_numbers}")
-                        extract_tables_from_pdf(pdf_reader, page_numbers)
-                    else:
-                        st.warning("No valid pages selected for table extraction.")
+            # Display the extracted information in a table
+            with st.container():
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.subheader("Extracted Information")
+                    info_df = pd.DataFrame(extracted_info, columns=["Term", "Response", "Page Number"])
+                    st.dataframe(info_df)
+                with col2:
+                    st.subheader("Document Preview")
+                    preview_area = st.empty()
+                    preview_area.markdown('<div style="height:400px; overflow-y:scroll; width:300px;">', unsafe_allow_html=True)
+                    for page_num in range(pdf_document.page_count):
+                        page = pdf_document.load_page(page_num)
+                        pix = page.get_pixmap()
+                        img_data = pix.tobytes("png")
+                        preview_area.image(img_data, caption=f"Page {page_num + 1}", use_column_width=True)
+                    preview_area.markdown("</div>", unsafe_allow_html=True)
 
         else:
             st.error("Unable to process the PDF. It may be password protected.")
