@@ -12,65 +12,93 @@ from streamlit import session_state
 from collections import Counter  # <-- Add this import for the Counter class
 from utils import helpers, init_session_states, page_config
 
-# Define terms and respective patterns for extraction
+
+# Define extraction configuration
 terms_to_extract = {
-    "Plan Name": r"Plan name:\s*(.*?)\n",
-    "Trustee": r"Trustee:\s*(.*?)\n",
-    "EIN": r"EIN:\s*(\d{2}-\d{7})",
-    "Year End": r"fiscal year end:\s*(\d{2}/\d{2})",
-    "Entity Type": r"entity type:\s*(.*?)\n",
-    "Entity State": r"state:\s*([A-Z]{2})",
-    "Is it a Safe Harbor": r"Safe harbor contributions are permitted.*?\n.*?\n\s*(Yes|No)",
-    "Vesting": r"Vesting Schedule.*?\n.*?\n\s*(.*?)\n",
-    "Profit Sharing Vesting": r"Non-Elective Contributions.*?Vesting Schedule.*?\n.*?\n\s*(.*?)\n",
-    "Elapsed Vesting": r"Elapsed Vesting.*?\s(True|False)",
-    "Plan Type": r"Plan Type.*?\s*(401\(k\))",
-    "Compensation Definition": r"Definition of Statutory Compensation.*?\s*(W-2 Compensation|Withholding|Section 415)",
-    "Deferral Change Frequency": r"Participants modify/start/stop Elective Deferrals.*?\n.*?\n\s*(.*?)\n",
-    "Match Frequency": r"determining the amount of an allocation.*?\n.*?\n\s*(.*?)\n",
-    "Entry Date": r"Entry Dates for Plan Participation.*?\n.*?\n\s*(.*?)\n",
-    "Match Entry Date": r"Match Entry date.*?\n.*?\n\s*(.*?)\n",
-    "Profit Share Entry Date": r"Profit share entry date.*?\n.*?\n\s*(.*?)\n",
-    "Minimum Age": r"Age Requirement for Plan Participation.*?\n.*?\n\s*(\d+)",
-    "Match Minimum Age": r"Match Minimum age.*?\n.*?\n\s*(\d+)",
-    "Profit Share Minimum Age": r"Profit Share Minimum Age.*?\n.*?\n\s*(\d+)",
+    "Plan Name": {"pattern": r"Plan name:\s*(.*?)\n", "page_hint": "Plan Name/Effective Date"},
+    "Trustee": {"pattern": r"Trustee:\s*(.*?)\n", "fallback": "Not explicitly mentioned"},
+    "EIN": {"pattern": r"EIN:\s*(\d{2}-\d{7})", "page_hint": "EMPLOYER INFORMATION"},
+    "Year End": {"pattern": r"fiscal year end:\s*(\d{2}/\d{2})", "page_hint": "Plan Year"},
+    "Entity Type": {"pattern": r"entity type:\s*(.*?)\n", "page_hint": "EMPLOYER INFORMATION"},
+    "Entity State": {"pattern": r"state:\s*([A-Z]{2})", "page_hint": "EMPLOYER INFORMATION"},
+    "Is it a Safe Harbor": {
+        "pattern": r"Safe harbor contributions are permitted.*?\n.*?\n\s*(Yes|No)",
+        "fallback": "No",
+    },
+    "Vesting": {"pattern": r"Vesting Schedule.*?\n.*?\n\s*(.*?)\n", "page_hint": "VESTING"},
+    "Profit Sharing Vesting": {
+        "pattern": r"Non-Elective Contributions.*?Vesting Schedule.*?\n.*?\n\s*(.*?)\n",
+        "page_hint": "VESTING",
+    },
+    "Elapsed Vesting": {"pattern": r"Elapsed Vesting.*?\s(True|False)", "fallback": "False"},
+    "Plan Type": {"pattern": r"Plan Type.*?\s*(401\(k\))", "page_hint": "PLAN INFORMATION"},
+    "Compensation Definition": {
+        "pattern": r"Definition of Statutory Compensation.*?\s*(W-2 Compensation|Withholding|Section 415)",
+        "page_hint": "Compensation",
+    },
+    "Deferral Change Frequency": {
+        "pattern": r"Participants modify/start/stop Elective Deferrals.*?\n.*?\n\s*(.*?)\n",
+        "page_hint": "CONTRIBUTIONS",
+    },
+    "Match Frequency": {
+        "pattern": r"determining the amount of an allocation.*?\n.*?\n\s*(.*?)\n",
+        "page_hint": "CONTRIBUTIONS",
+    },
+    "Entry Date": {
+        "pattern": r"Entry Dates for Plan Participation.*?\n.*?\n\s*(.*?)\n",
+        "page_hint": "Eligibility",
+    },
+    "Match Entry Date": {"pattern": r"Match Entry date.*?\n.*?\n\s*(.*?)\n", "page_hint": "Eligibility"},
+    "Profit Share Entry Date": {
+        "pattern": r"Profit share entry date.*?\n.*?\n\s*(.*?)\n",
+        "page_hint": "Eligibility",
+    },
+    "Minimum Age": {"pattern": r"Age Requirement.*?\n.*?\n\s*(\d+)", "page_hint": "Eligibility"},
+    "Match Minimum Age": {"pattern": r"Match Minimum age.*?\n.*?\n\s*(\d+)", "page_hint": "Eligibility"},
+    "Profit Share Minimum Age": {
+        "pattern": r"Profit Share Minimum Age.*?\n.*?\n\s*(\d+)",
+        "page_hint": "Eligibility",
+    },
 }
 
-# Function to extract text by matching patterns
-def extract_terms_from_text(text, patterns):
+# Function to extract text based on pattern and fallback mechanisms
+def extract_terms_from_text(doc, patterns):
     results = []
-    for term, pattern in patterns.items():
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            response = match.group(1).strip()
-            page_number = find_page_number(text, match.start())
-            results.append([term, response, page_number])
-        else:
-            results.append([term, "Not Found", "N/A"])
+    for term, config in patterns.items():
+        extracted_value = "Not Found"
+        page_number = "N/A"
+        pattern = config.get("pattern", None)
+        fallback = config.get("fallback", None)
+        page_hint = config.get("page_hint", None)
+
+        for page_num, page in enumerate(doc, start=1):
+            page_text = page.get_text("text")
+            if pattern:
+                match = re.search(pattern, page_text, re.IGNORECASE)
+                if match:
+                    extracted_value = match.group(1).strip()
+                    page_number = page_num
+                    break
+            # Check context or fallback if not found
+            if page_hint and page_hint.lower() in page_text.lower():
+                if fallback:
+                    extracted_value = fallback
+                    page_number = page_num
+        # Add default fallback if nothing is found
+        if extracted_value == "Not Found" and fallback:
+            extracted_value = fallback
+        results.append([term, extracted_value, page_number])
     return results
 
-# Function to find page number for a match
-def find_page_number(text, match_start):
-    pages = text.split("\f")
-    cumulative_index = 0
-    for i, page in enumerate(pages):
-        cumulative_index += len(page)
-        if match_start < cumulative_index:
-            return i + 1
-    return "Unknown"
-
-# PDF text extraction and data compilation
+# PDF parsing and processing
 def process_pdf(file_path):
     doc = fitz.open(file_path)
-    full_text = ""
-    for page in doc:
-        full_text += page.get_text("text") + "\f"
-
-    extracted_data = extract_terms_from_text(full_text, terms_to_extract)
+    extracted_data = extract_terms_from_text(doc, terms_to_extract)
     return pd.DataFrame(extracted_data, columns=["Term", "Response", "Page Number"])
 
-# Main
+# Main Function
 if __name__ == "__main__":
     file_path = "Adoption_Agreement.pdf"
     df = process_pdf(file_path)
     print(df)
+
