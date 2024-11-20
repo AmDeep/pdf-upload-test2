@@ -1,17 +1,7 @@
 import re
 import pandas as pd
-from pypdf import PdfReader
-import os
-import sys
-import traceback
-from io import BytesIO
-import streamlit as st
 import fitz  # PyMuPDF
-from pypdf.errors import FileNotDecryptedError
-from streamlit import session_state
-from collections import Counter  # <-- Add this import for the Counter class
-from utils import helpers, init_session_states, page_config
-
+import streamlit as st
 
 # Define extraction configuration
 terms_to_extract = {
@@ -90,37 +80,28 @@ def extract_terms_from_text(doc, patterns):
         results.append([term, extracted_value, page_number])
     return results
 
-# Helper function to find the page number for a matched term
-def find_page_number(text, match_start):
-    # Split the document into pages
-    pages = text.split("\f")
-    cumulative_index = 0
-    for i, page in enumerate(pages):
-        cumulative_index += len(page)
-        if match_start < cumulative_index:
-            return i + 1
-    return "Unknown"
+# PDF parsing and processing
+def process_pdf(uploaded_file):
+    doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+    extracted_data = extract_terms_from_text(doc, terms_to_extract)
+    return pd.DataFrame(extracted_data, columns=["Term", "Response", "Page Number"])
 
-# Streamlit interface
+# Streamlit App Interface
 def main():
-    st.title("PDF Information Extraction")
-    uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
-
-    if uploaded_file is not None:
-        # Load PDF
-        pdf_reader = PdfReader(uploaded_file)
-        full_text = ""
-        for page in pdf_reader.pages:
-            full_text += page.extract_text()
-
-        # Extract terms
-        extracted_data = extract_terms_from_text(full_text, terms_to_extract)
-
-        # Display the results
-        df = pd.DataFrame(extracted_data, columns=["Term", "Response", "Page Number"])
+    st.title("Dynamic PDF Information Extraction")
+    uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
+    if uploaded_file:
+        with st.spinner("Processing the document..."):
+            results_df = process_pdf(uploaded_file)
+        st.success("Extraction complete!")
         st.subheader("Extracted Information")
-        st.dataframe(df)
+        st.dataframe(results_df)
+        st.download_button(
+            label="Download Results as CSV",
+            data=results_df.to_csv(index=False),
+            file_name="extracted_terms.csv",
+            mime="text/csv",
+        )
 
 if __name__ == "__main__":
     main()
-
