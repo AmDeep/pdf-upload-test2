@@ -90,15 +90,37 @@ def extract_terms_from_text(doc, patterns):
         results.append([term, extracted_value, page_number])
     return results
 
-# PDF parsing and processing
-def process_pdf(file_path):
-    doc = fitz.open(file_path)
-    extracted_data = extract_terms_from_text(doc, terms_to_extract)
-    return pd.DataFrame(extracted_data, columns=["Term", "Response", "Page Number"])
+# Helper function to find the page number for a matched term
+def find_page_number(text, match_start):
+    # Split the document into pages
+    pages = text.split("\f")
+    cumulative_index = 0
+    for i, page in enumerate(pages):
+        cumulative_index += len(page)
+        if match_start < cumulative_index:
+            return i + 1
+    return "Unknown"
 
-# Main Function
+# Streamlit interface
+def main():
+    st.title("PDF Information Extraction")
+    uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
+
+    if uploaded_file is not None:
+        # Load PDF
+        pdf_reader = PdfReader(uploaded_file)
+        full_text = ""
+        for page in pdf_reader.pages:
+            full_text += page.extract_text()
+
+        # Extract terms
+        extracted_data = extract_terms_from_text(full_text, terms_to_extract)
+
+        # Display the results
+        df = pd.DataFrame(extracted_data, columns=["Term", "Response", "Page Number"])
+        st.subheader("Extracted Information")
+        st.dataframe(df)
+
 if __name__ == "__main__":
-    file_path = "Adoption_Agreement.pdf"
-    df = process_pdf(file_path)
-    print(df)
+    main()
 
