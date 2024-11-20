@@ -1,6 +1,16 @@
 import re
 import pandas as pd
 from pypdf import PdfReader
+import os
+import sys
+import traceback
+from io import BytesIO
+import streamlit as st
+import fitz  # PyMuPDF
+from pypdf.errors import FileNotDecryptedError
+from streamlit import session_state
+from collections import Counter  # <-- Add this import for the Counter class
+from utils import helpers, init_session_states, page_config
 
 # Define the terms to extract with respective patterns
 terms_to_extract = {
